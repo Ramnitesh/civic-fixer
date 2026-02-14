@@ -1,0 +1,136 @@
+import { Navigation } from "@/components/Navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertJobSchema } from "@shared/schema";
+import { useCreateJob } from "@/hooks/use-jobs";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useLocation } from "wouter";
+import { Loader2, ArrowLeft } from "lucide-react";
+import { Link } from "wouter";
+
+// Override schema for form validation to handle string -> number coercion
+const formSchema = insertJobSchema.extend({
+  targetAmount: z.coerce.number().min(50, "Minimum amount is $50").max(10000, "Maximum amount is $10,000"),
+  leaderId: z.number().optional(), // Injected by backend/hook logic usually, but here we can rely on backend to assign from session
+});
+
+export default function CreateJobPage() {
+  const { mutate: createJob, isPending } = useCreateJob();
+  const [, setLocation] = useLocation();
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      location: "",
+      targetAmount: undefined,
+    },
+  });
+
+  const onSubmit = (data: z.infer<typeof formSchema>) => {
+    // We assume backend attaches leaderId from session
+    createJob(data as any, {
+      onSuccess: () => setLocation("/dashboard"),
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navigation />
+      <div className="container mx-auto px-4 py-8 max-w-2xl">
+        <Link href="/dashboard">
+          <Button variant="ghost" className="mb-4 pl-0 hover:pl-2 transition-all gap-2">
+            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+          </Button>
+        </Link>
+
+        <Card className="border-border/50 shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-2xl font-display">Create a New Job</CardTitle>
+            <CardDescription>
+              Identify an issue in your community and mobilize funding to fix it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Job Title</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Park Cleanup on 5th St." {...field} />
+                      </FormControl>
+                      <FormDescription>Be specific about the task.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Location</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Central Park, North Entrance" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="targetAmount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Target Amount ($)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="500" {...field} />
+                      </FormControl>
+                      <FormDescription>Amount needed to pay the worker + supplies.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Describe the issue and what needs to be done..." 
+                          className="min-h-[120px]"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button type="submit" className="w-full btn-primary" disabled={isPending}>
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Publish Job
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

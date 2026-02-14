@@ -1,0 +1,287 @@
+## 🔵 PROJECT TITLE
+
+CrowdCivicFix App
+
+---
+
+## 🔵 PROJECT GOAL
+
+Build a full-stack web application that facilitates civic engagement by enabling communities to:
+
+* Initiate cleanup jobs for private residential properties.
+* Gather funds from at least three contributors.
+* Allow workers to submit applications for job acceptance.
+* Enable job leaders to select a worker for the task.
+* Require workers to upload proof of job completion (before/after/disposal images).
+* Allow leaders to verify job completion.
+* Implement a 24-hour cooling-off period before automatic payout release to workers.
+* Charge a flat fee of ₹500 per job to the platform.
+* Set a maximum job value of ₹10,000.
+
+This is an escrow-based civic coordination platform.
+
+---
+
+## 🔵 TECH STACK REQUIREMENTS
+
+* Next.js (App Router, full-stack)
+* PostgreSQL database
+* Prisma ORM
+* Razorpay integration (India)
+* JWT authentication
+* Role-based access control
+* Image upload with cloud storage (local fallback acceptable for MVP)
+* Admin dashboard
+
+---
+
+## 🔵 USER ROLES
+
+1. Leader (creates job, selects worker, verifies completion)
+2. Contributor (provides funds)
+3. Worker (applies, completes job, uploads proof)
+4. Admin (manages platform operations)
+
+---
+
+## 🔵 DATABASE SCHEMA
+
+Create Prisma models:
+
+### User
+
+* id (UUID)
+* name
+* phone
+* role (LEADER | CONTRIBUTOR | WORKER | ADMIN)
+* rating (float, default 5)
+* totalEarnings (float, default 0)
+* createdAt
+
+---
+
+### Job
+
+* id (UUID)
+* title
+* description
+* location
+* targetAmount (float, max 10000)
+* collectedAmount (float)
+* status (FUNDING_OPEN | FUNDING_COMPLETE | WORKER_SELECTED | IN_PROGRESS | AWAITING_VERIFICATION | UNDER_REVIEW | COMPLETED | DISPUTED | CANCELLED)
+* leaderId (relation)
+* selectedWorkerId (nullable)
+* createdAt
+* reviewDeadline (datetime nullable)
+
+---
+
+### Contribution
+
+* id
+* jobId
+* userId
+* amount
+* paymentStatus (PENDING | SUCCESS | FAILED)
+* createdAt
+
+---
+
+### WorkerApplication
+
+* id
+* jobId
+* workerId
+* bidAmount
+* status (PENDING | ACCEPTED | REJECTED)
+
+---
+
+### JobProof
+
+* id
+* jobId
+* beforePhoto
+* afterPhoto
+* disposalPhoto
+* uploadedAt
+
+---
+
+### Dispute
+
+* id
+* jobId
+* raisedById
+* reason
+* status (OPEN | RESOLVED | REJECTED)
+
+---
+
+## 🔵 BUSINESS RULES
+
+1. Maximum job target amount = ₹10,000.
+2. Platform fee = ₹500 per job.
+3. Minimum of 3 unique contributors required for job status to change to FUNDING_COMPLETE.
+4. Workers are prohibited from applying for their own jobs.
+5. Workers' monthly earnings are capped at ₹50,000.
+6. Disposal photos are mandatory before verification.
+7. Leaders cannot verify completion without disposal proof.
+8. A 24-hour automatic review window is enforced before payouts.
+9. Payouts are held if a dispute is raised.
+10. If disposal proof is missing, all contributors are automatically refunded.
+
+---
+
+## 🔵 JOB STATE FLOW (STRICT)
+
+FUNDING_OPEN
+→ FUNDING_COMPLETE
+→ WORKER_SELECTED
+→ IN_PROGRESS
+→ AWAITING_VERIFICATION
+→ UNDER_REVIEW (24h timer starts)
+→ COMPLETED (auto payout)
+OR → DISPUTED
+
+States cannot be skipped.
+
+---
+
+## 🔵 PAYMENT FLOW
+
+Utilize Razorpay Order API.
+
+Contribution Flow:
+
+* Create Razorpay order.
+* On successful payment webhook:
+  * Update Contribution paymentStatus.
+  * Increase collectedAmount.
+
+When collectedAmount ≥ targetAmount AND contributors ≥ 3:
+→ status = FUNDING_COMPLETE.
+
+Payout Flow:
+After reviewDeadline expires with no disputes:
+
+* Deduct ₹500 platform fee.
+* Payout remaining to worker via Razorpay payout API.
+* Update job status to COMPLETED.
+
+If a dispute arises:
+
+* Do not release payout.
+
+---
+
+## 🔵 FRAUD PREVENTION
+
+Implement:
+
+* Minimum of 3 contributors rule.
+* Prevent same user from contributing multiple times for the same job.
+* Validate that a worker cannot also be a contributor for the same job.
+* Prevent leaders from selecting themselves as workers.
+* Capture timestamps for photo uploads.
+* Store metadata for images.
+* Check worker's monthly earnings before allowing applications.
+* Admin capability to freeze jobs.
+
+---
+
+## 🔵 PAGES TO BUILD
+
+1. Authentication (Login/Register)
+2. User Dashboard
+3. Create Job
+4. Job Details
+5. Contribution Page
+6. Worker Application Page
+7. Proof Upload Page
+8. Leader Verification Page
+9. Dispute Management Page
+10. Admin Control Panel
+
+---
+
+## 🔵 ADMIN PANEL FEATURES
+
+* View all jobs.
+* Monitor disputes.
+* Freeze jobs.
+* Force refunds.
+* Override payouts.
+* Investigate suspicious activities.
+* Review workers' monthly earnings.
+
+---
+
+## 🔵 UI REQUIREMENTS
+
+* Clean and minimalistic UI design.
+* Role-based navigation for users.
+* Visual representation of job progress.
+* Funding progress bar display.
+* Countdown timer for reviews.
+* Transparent ledger for transactions.
+
+---
+
+## 🔵 SECURITY REQUIREMENTS
+
+* JWT-based authentication.
+* Role-based middleware for access control.
+* Protection of API routes.
+* Webhook verification from Razorpay.
+* Input validation for all forms.
+* Prevention of SQL injection via Prisma.
+* Secure file upload validation.
+
+---
+
+## 🔵 MVP LIMITATIONS
+
+* Restriction to private residential jobs only.
+* Exclusion of public property jobs.
+* Configuration limited to a single city.
+* Absence of subscription models.
+* No AI-driven pricing mechanisms.
+* Lack of chat functionalities.
+
+---
+
+## 🔵 TESTING SCENARIOS
+
+1. Normal job completion process.
+2. Attempt with less than 3 contributors → block action.
+3. Worker without disposal proof → prevent verification.
+4. Dispute raised during 24-hour review → block payout.
+5. Worker exceeding ₹50k monthly earnings → block application.
+6. Fraud attempt (same user making multiple contributions).
+
+---
+
+## 🔵 DEPLOYMENT
+
+Deploy on:
+
+* Replit or Vercel.
+* Use environment variables for Razorpay keys.
+* Secure webhook endpoint setup.
+
+---
+
+## 🔵 OUTPUT REQUIREMENT
+
+Generate:
+
+* Complete project structure.
+* Prisma schema.
+* API routes.
+* Frontend pages.
+* Middleware.
+* Razorpay integration.
+* Admin control panel.
+* Database migration scripts.
+* Setup instructions.
