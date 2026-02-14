@@ -5,17 +5,35 @@ import { insertJobSchema } from "@shared/schema";
 import { useCreateJob } from "@/hooks/use-jobs";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { useLocation } from "wouter";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
 
 // Override schema for form validation to handle string -> number coercion
 const formSchema = insertJobSchema.extend({
-  targetAmount: z.coerce.number().min(50, "Minimum amount is $50").max(10000, "Maximum amount is $10,000"),
+  targetAmount: z.coerce
+    .number()
+    .positive("Target amount must be greater than 0")
+    .max(10000, "Maximum amount is ₹10,000"),
   leaderId: z.number().optional(), // Injected by backend/hook logic usually, but here we can rely on backend to assign from session
 });
 
@@ -30,6 +48,7 @@ export default function CreateJobPage() {
       description: "",
       location: "",
       targetAmount: undefined,
+      isPrivateResidentialProperty: false,
     },
   });
 
@@ -45,21 +64,30 @@ export default function CreateJobPage() {
       <Navigation />
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <Link href="/dashboard">
-          <Button variant="ghost" className="mb-4 pl-0 hover:pl-2 transition-all gap-2">
+          <Button
+            variant="ghost"
+            className="mb-4 pl-0 hover:pl-2 transition-all gap-2"
+          >
             <ArrowLeft className="w-4 h-4" /> Back to Dashboard
           </Button>
         </Link>
 
         <Card className="border-border/50 shadow-lg">
           <CardHeader>
-            <CardTitle className="text-2xl font-display">Create a New Job</CardTitle>
+            <CardTitle className="text-2xl font-display">
+              Create a New Job
+            </CardTitle>
             <CardDescription>
-              Identify an issue in your community and mobilize funding to fix it.
+              Identify an issue in your community and mobilize funding to fix
+              it.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="space-y-6"
+              >
                 <FormField
                   control={form.control}
                   name="title"
@@ -67,9 +95,14 @@ export default function CreateJobPage() {
                     <FormItem>
                       <FormLabel>Job Title</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. Park Cleanup on 5th St." {...field} />
+                        <Input
+                          placeholder="e.g. Park Cleanup on 5th St."
+                          {...field}
+                        />
                       </FormControl>
-                      <FormDescription>Be specific about the task.</FormDescription>
+                      <FormDescription>
+                        Be specific about the task.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -82,7 +115,10 @@ export default function CreateJobPage() {
                     <FormItem>
                       <FormLabel>Location</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. Central Park, North Entrance" {...field} />
+                        <Input
+                          placeholder="e.g. Central Park, North Entrance"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -94,12 +130,38 @@ export default function CreateJobPage() {
                   name="targetAmount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Target Amount ($)</FormLabel>
+                      <FormLabel>Target Amount (₹)</FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="500" {...field} />
                       </FormControl>
-                      <FormDescription>Amount needed to pay the worker + supplies.</FormDescription>
+                      <FormDescription>
+                        Maximum allowed is ₹10,000.
+                      </FormDescription>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="isPrivateResidentialProperty"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">
+                          Private residential property
+                        </FormLabel>
+                        <FormDescription>
+                          Required to indicate if this cleanup is on private
+                          residential property.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
                     </FormItem>
                   )}
                 />
@@ -111,10 +173,10 @@ export default function CreateJobPage() {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Describe the issue and what needs to be done..." 
+                        <Textarea
+                          placeholder="Describe the issue and what needs to be done..."
                           className="min-h-[120px]"
-                          {...field} 
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -122,8 +184,14 @@ export default function CreateJobPage() {
                   )}
                 />
 
-                <Button type="submit" className="w-full btn-primary" disabled={isPending}>
-                  {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                <Button
+                  type="submit"
+                  className="w-full btn-primary"
+                  disabled={isPending}
+                >
+                  {isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
                   Publish Job
                 </Button>
               </form>

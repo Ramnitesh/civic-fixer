@@ -1,12 +1,23 @@
 import { db } from "./db";
 import {
-  users, jobs, contributions, workerApplications, jobProofs, disputes,
-  type User, type InsertUser,
-  type Job, type InsertJob,
-  type Contribution, type InsertContribution,
-  type WorkerApplication, type InsertWorkerApplication,
-  type JobProof, type InsertJobProof,
-  type Dispute, type InsertDispute
+  users,
+  jobs,
+  contributions,
+  workerApplications,
+  jobProofs,
+  disputes,
+  type User,
+  type InsertUser,
+  type Job,
+  type InsertJob,
+  type Contribution,
+  type InsertContribution,
+  type WorkerApplication,
+  type InsertWorkerApplication,
+  type JobProof,
+  type InsertJobProof,
+  type Dispute,
+  type InsertDispute,
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 
@@ -20,23 +31,52 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, updates: Partial<User>): Promise<User>;
   sessionStore: session.Store;
 
   // Jobs
   getJobs(): Promise<Job[]>;
   getJob(id: number): Promise<Job | undefined>;
   createJob(job: InsertJob): Promise<Job>;
-  updateJob(id: number, updates: Partial<InsertJob> & { status?: string, selectedWorkerId?: number }): Promise<Job>;
+  updateJob(
+    id: number,
+    updates: Partial<Job> & {
+      status?: Job["status"];
+      selectedWorkerId?: number;
+    },
+  ): Promise<Job>;
 
   // Contributions
   createContribution(contribution: InsertContribution): Promise<Contribution>;
   getContributionsByJob(jobId: number): Promise<Contribution[]>;
+  getContributionsByUser(userId: number): Promise<Contribution[]>;
+  getContributionByJobAndUser(
+    jobId: number,
+    userId: number,
+  ): Promise<Contribution | undefined>;
   getContributorCount(jobId: number): Promise<number>;
 
   // Applications
   createApplication(app: InsertWorkerApplication): Promise<WorkerApplication>;
-  getApplicationsByJob(jobId: number): Promise<(WorkerApplication & { worker: User })[]>;
-  updateApplicationStatus(id: number, status: string): Promise<WorkerApplication>;
+  getApplicationsByJob(
+    jobId: number,
+  ): Promise<(WorkerApplication & { worker: User })[]>;
+  getApplicationById(id: number): Promise<WorkerApplication | undefined>;
+  getApplicationByJobAndWorker(
+    jobId: number,
+    workerId: number,
+  ): Promise<WorkerApplication | undefined>;
+  getAcceptedApplicationByJob(
+    jobId: number,
+  ): Promise<WorkerApplication | undefined>;
+  updateApplicationStatus(
+    id: number,
+    status: WorkerApplication["status"],
+  ): Promise<WorkerApplication>;
+  rejectOtherApplications(
+    jobId: number,
+    acceptedApplicationId: number,
+  ): Promise<void>;
 
   // Proofs
   createJobProof(proof: InsertJobProof): Promise<JobProof>;
@@ -45,6 +85,7 @@ export interface IStorage {
   // Disputes
   createDispute(dispute: InsertDispute): Promise<Dispute>;
   getDisputes(): Promise<Dispute[]>;
+  getDisputesByJob(jobId: number): Promise<Dispute[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -63,12 +104,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username));
     return user;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const [user] = await db
+      .insert(users)
+      .values({
+        ...insertUser,
+        skillTags: Array.isArray(insertUser.skillTags)
+          ? insertUser.skillTags.map((tag) => String(tag))
+          : undefined,
+      })
+      .returning();
+    return user;
+  }
+
+  async updateUser(id: number, updates: Partial<User>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
     return user;
   }
 
@@ -87,8 +148,15 @@ export class DatabaseStorage implements IStorage {
     return job;
   }
 
-  async updateJob(id: number, updates: Partial<InsertJob> & { status?: string, selectedWorkerId?: number }): Promise<Job> {
-    const [job] = await db.update(jobs)
+  async updateJob(
+    id: number,
+    updates: Partial<Job> & {
+      status?: Job["status"];
+      selectedWorkerId?: number;
+    },
+  ): Promise<Job> {
+    const [job] = await db
+      .update(jobs)
       .set(updates)
       .where(eq(jobs.id, id))
       .returning();
@@ -96,58 +164,153 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Contributions
-  async createContribution(insertContribution: InsertContribution): Promise<Contribution> {
-    const [contribution] = await db.insert(contributions).values(insertContribution).returning();
-    
+  async createContribution(
+    insertContribution: InsertContribution,
+  ): Promise<Contribution> {
+    const [contribution] = await db
+      .insert(contributions)
+      .values(insertContribution)
+      .returning();
+
     // Auto-update job collected amount
     const job = await this.getJob(insertContribution.jobId);
     if (job) {
-        await this.updateJob(job.id, {
-            collectedAmount: (job.collectedAmount || 0) + insertContribution.amount
-        });
+      await this.updateJob(job.id, {
+        collectedAmount: (job.collectedAmount || 0) + insertContribution.amount,
+      });
     }
 
     return contribution;
   }
 
   async getContributionsByJob(jobId: number): Promise<Contribution[]> {
-    return await db.select().from(contributions).where(eq(contributions.jobId, jobId));
+    return await db
+      .select()
+      .from(contributions)
+      .where(eq(contributions.jobId, jobId));
+  }
+
+  async getContributionsByUser(userId: number): Promise<Contribution[]> {
+    return await db
+      .select()
+      .from(contributions)
+      .where(eq(contributions.userId, userId))
+      .orderBy(desc(contributions.createdAt));
+  }
+
+  async getContributionByJobAndUser(
+    jobId: number,
+    userId: number,
+  ): Promise<Contribution | undefined> {
+    const [contribution] = await db
+      .select()
+      .from(contributions)
+      .where(
+        and(eq(contributions.jobId, jobId), eq(contributions.userId, userId)),
+      );
+    return contribution;
   }
 
   async getContributorCount(jobId: number): Promise<number> {
     // Count unique user IDs contributing to this job
     const result = await db.execute(sql`
-        SELECT COUNT(DISTINCT user_id) as count 
-        FROM contributions 
+        SELECT COUNT(DISTINCT user_id) as count
+        FROM contributions
         WHERE job_id = ${jobId}
     `);
     return Number(result.rows[0].count);
   }
 
   // Applications
-  async createApplication(insertApp: InsertWorkerApplication): Promise<WorkerApplication> {
-    const [app] = await db.insert(workerApplications).values(insertApp).returning();
+  async createApplication(
+    insertApp: InsertWorkerApplication,
+  ): Promise<WorkerApplication> {
+    const [app] = await db
+      .insert(workerApplications)
+      .values(insertApp)
+      .returning();
     return app;
   }
 
-  async getApplicationsByJob(jobId: number): Promise<(WorkerApplication & { worker: User })[]> {
-    const result = await db.select({
+  async getApplicationsByJob(
+    jobId: number,
+  ): Promise<(WorkerApplication & { worker: User })[]> {
+    const result = await db
+      .select({
         application: workerApplications,
-        worker: users
-    })
-    .from(workerApplications)
-    .innerJoin(users, eq(workerApplications.workerId, users.id))
-    .where(eq(workerApplications.jobId, jobId));
+        worker: users,
+      })
+      .from(workerApplications)
+      .innerJoin(users, eq(workerApplications.workerId, users.id))
+      .where(eq(workerApplications.jobId, jobId));
 
-    return result.map(r => ({ ...r.application, worker: r.worker }));
+    return result.map((r) => ({ ...r.application, worker: r.worker }));
   }
 
-  async updateApplicationStatus(id: number, status: string): Promise<WorkerApplication> {
-    const [app] = await db.update(workerApplications)
-        .set({ status })
-        .where(eq(workerApplications.id, id))
-        .returning();
+  async getApplicationById(id: number): Promise<WorkerApplication | undefined> {
+    const [app] = await db
+      .select()
+      .from(workerApplications)
+      .where(eq(workerApplications.id, id));
     return app;
+  }
+
+  async getApplicationByJobAndWorker(
+    jobId: number,
+    workerId: number,
+  ): Promise<WorkerApplication | undefined> {
+    const [app] = await db
+      .select()
+      .from(workerApplications)
+      .where(
+        and(
+          eq(workerApplications.jobId, jobId),
+          eq(workerApplications.workerId, workerId),
+        ),
+      );
+    return app;
+  }
+
+  async getAcceptedApplicationByJob(
+    jobId: number,
+  ): Promise<WorkerApplication | undefined> {
+    const [app] = await db
+      .select()
+      .from(workerApplications)
+      .where(
+        and(
+          eq(workerApplications.jobId, jobId),
+          eq(workerApplications.status, "ACCEPTED"),
+        ),
+      );
+    return app;
+  }
+
+  async updateApplicationStatus(
+    id: number,
+    status: WorkerApplication["status"],
+  ): Promise<WorkerApplication> {
+    const [app] = await db
+      .update(workerApplications)
+      .set({ status })
+      .where(eq(workerApplications.id, id))
+      .returning();
+    return app;
+  }
+
+  async rejectOtherApplications(
+    jobId: number,
+    acceptedApplicationId: number,
+  ): Promise<void> {
+    await db
+      .update(workerApplications)
+      .set({ status: "REJECTED" })
+      .where(
+        and(
+          eq(workerApplications.jobId, jobId),
+          sql`${workerApplications.id} <> ${acceptedApplicationId}`,
+        ),
+      );
   }
 
   // Proofs
@@ -157,18 +320,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getJobProof(jobId: number): Promise<JobProof | undefined> {
-    const [proof] = await db.select().from(jobProofs).where(eq(jobProofs.jobId, jobId));
+    const [proof] = await db
+      .select()
+      .from(jobProofs)
+      .where(eq(jobProofs.jobId, jobId));
     return proof;
   }
 
   // Disputes
   async createDispute(insertDispute: InsertDispute): Promise<Dispute> {
-    const [dispute] = await db.insert(disputes).values(insertDispute).returning();
+    const [dispute] = await db
+      .insert(disputes)
+      .values(insertDispute)
+      .returning();
     return dispute;
   }
 
   async getDisputes(): Promise<Dispute[]> {
     return await db.select().from(disputes).orderBy(desc(disputes.createdAt));
+  }
+
+  async getDisputesByJob(jobId: number): Promise<Dispute[]> {
+    return await db
+      .select()
+      .from(disputes)
+      .where(eq(disputes.jobId, jobId))
+      .orderBy(desc(disputes.createdAt));
   }
 }
 

@@ -9,13 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
-  
+
   // Fetch jobs relevant to the user
   // Leader: jobs they created
   // Worker: jobs they are assigned to (status != FUNDING_OPEN)
   // Contributor: jobs they funded (future implementation)
   const { data: jobs, isLoading: jobsLoading } = useJobs(
-    user?.role === "LEADER" ? { leaderId: String(user.id) } : undefined
+    user?.role === "LEADER" ? { leaderId: String(user.id) } : undefined,
   );
 
   if (authLoading || jobsLoading) {
@@ -31,12 +31,12 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      
+
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-bold font-display">
-              Welcome back, {user.name.split(' ')[0]}
+              Welcome back, {user.name.split(" ")[0]}
             </h1>
             <p className="text-muted-foreground mt-1">
               Here's what's happening in your community today.
@@ -55,7 +55,9 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Impact</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Impact
+              </CardTitle>
               <Briefcase className="w-4 h-4 text-primary" />
             </CardHeader>
             <CardContent>
@@ -65,26 +67,38 @@ export default function DashboardPage() {
               </p>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Wallet Balance</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Wallet Balance
+              </CardTitle>
               <Wallet className="w-4 h-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${user.totalEarnings || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">Available for withdrawal</p>
+              <div className="text-2xl font-bold">
+                ${user.totalEarnings || 0}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Available for withdrawal
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Reputation Score</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Reputation Score
+              </CardTitle>
               <Award className="w-4 h-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{user.rating?.toFixed(1) || "5.0"}</div>
-              <p className="text-xs text-muted-foreground mt-1">Based on community feedback</p>
+              <div className="text-2xl font-bold">
+                {user.rating?.toFixed(1) || "5.0"}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Based on community feedback
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -97,13 +111,15 @@ export default function DashboardPage() {
               <p className="text-muted-foreground">No active jobs found.</p>
               {user.role === "LEADER" && (
                 <Link href="/create-job">
-                  <Button variant="link" className="text-primary">Create one now</Button>
+                  <Button variant="ghost" className="text-primary">
+                    Create one now
+                  </Button>
                 </Link>
               )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {jobs?.map((job) => (
+              {jobs?.map((job: any) => (
                 <JobCard key={job.id} job={job} />
               ))}
             </div>

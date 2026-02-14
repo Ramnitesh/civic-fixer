@@ -4,35 +4,68 @@ import { useJob, useUpdateJob } from "@/hooks/use-jobs";
 import { useAuth } from "@/hooks/use-auth";
 import { useCreateContribution } from "@/hooks/use-contributions";
 import { useApplications, useApplyForJob } from "@/hooks/use-applications";
-import { Loader2, MapPin, Calendar, User, DollarSign, CheckCircle, ShieldAlert, UploadCloud } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { format } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
+import { useToast } from "@/hooks/use-toast";
+import { useEffect, useMemo, useState } from "react";
+import { formatDistanceStrict } from "date-fns";
+import {
+  Loader2,
+  MapPin,
+  Calendar,
+  UploadCloud,
+  Share2,
+  Clock3,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 
 export default function JobDetailsPage() {
-  const params = useParams();
-  const id = Number(params.id);
-  const { data: job, isLoading } = useJob(id);
+  const { id: idParam } = useParams();
+  const id = Number(idParam);
   const { user } = useAuth();
-  const { mutate: contribute, isPending: isContributing } = useCreateContribution();
+  const { data: job, isLoading } = useJob(id);
+  const { data: applications = [] } = useApplications(id);
+  const { mutate: updateJob, isPending: isUpdatingJob } = useUpdateJob();
+  const { mutate: contribute, isPending: isContributing } =
+    useCreateContribution();
   const { mutate: apply, isPending: isApplying } = useApplyForJob();
-  const { mutate: updateJob } = useUpdateJob();
-  const { data: applications } = useApplications(id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [bidAmount, setBidAmount] = useState<string>("");
-  const [contributionAmount, setContributionAmount] = useState<string>("50");
+  const [contributionAmount, setContributionAmount] = useState("100");
+  const [bidAmount, setBidAmount] = useState("");
+  const [beforeFile, setBeforeFile] = useState<File | null>(null);
+  const [afterFile, setAfterFile] = useState<File | null>(null);
+  const [disposalFile, setDisposalFile] = useState<File | null>(null);
+  const [disputeReason, setDisputeReason] = useState("");
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editTargetAmount, setEditTargetAmount] = useState("");
+  const [editPrivateProperty, setEditPrivateProperty] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!job) return;
+    setEditTitle(job.title);
+    setEditDescription(job.description);
+    setEditLocation(job.location);
+    setEditTargetAmount(String(job.targetAmount));
+    setEditPrivateProperty(Boolean(job.isPrivateResidentialProperty));
+  }, [job]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const proofMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -41,299 +74,602 @@ export default function JobDetailsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Failed to upload proof");
+      if (!res.ok) {
+        const message =
+          (await res.json().catch(() => null))?.message ??
+          "Failed to upload proof";
+        throw new Error(message);
+      }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.jobs.get.path, id] });
-      // Also update job status to UNDER_REVIEW
-      updateJob({ id, status: "UNDER_REVIEW" });
-      toast({ title: "Proof Uploaded", description: "Leader will verify shortly." });
-    }
-  });
-  
-  // Application acceptance logic
-  const acceptApplicationMutation = useMutation({
-    mutationFn: async (appId: number) => {
-      await fetch(api.applications.update.path.replace(":id", String(appId)), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "ACCEPTED" }),
+      toast({
+        title: "Proof uploaded",
+        description: "Leader has been notified.",
       });
     },
-    onSuccess: (_, appId) => {
-      const app = applications?.find(a => a.id === appId);
-      if (app) {
-        updateJob({ id, selectedWorkerId: app.workerId, status: "IN_PROGRESS" });
-        toast({ title: "Worker Selected", description: "Job is now in progress." });
-      }
-    }
+    onError: (err: Error) => {
+      toast({
+        title: "Proof upload failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
   });
 
+  const disputeMutation = useMutation({
+    mutationFn: async (payload: { jobId: number; reason: string }) => {
+      const res = await fetch(api.disputes.create.path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const message =
+          (await res.json().catch(() => null))?.message ??
+          "Failed to raise dispute";
+        throw new Error(message);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.jobs.get.path, id] });
+      setDisputeReason("");
+      toast({
+        title: "Dispute raised",
+        description: "Admin will resolve this dispute.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Dispute failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: async (applicationId: number) => {
+      const res = await fetch(
+        api.applications.update.path.replace(":id", String(applicationId)),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "ACCEPTED" }),
+        },
+      );
+      if (!res.ok) {
+        const message =
+          (await res.json().catch(() => null))?.message ??
+          "Unable to select worker";
+        throw new Error(message);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.jobs.get.path, id] });
+      queryClient.invalidateQueries({
+        queryKey: [api.applications.list.path, id],
+      });
+      toast({
+        title: "Worker selected",
+        description: "Job status moved to WORKER_SELECTED.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Selection failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const toDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`Help fund this cleanup job: ${shareUrl}`)}`;
+  const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`Support this cleanup job: ${shareUrl}`)}`;
+
+  const reviewRemainingMs = useMemo(() => {
+    if (!job?.reviewDeadline) return 0;
+    return new Date(job.reviewDeadline).getTime() - now;
+  }, [job?.reviewDeadline, now]);
+
+  const reviewText =
+    reviewRemainingMs > 0
+      ? formatDistanceStrict(0, reviewRemainingMs)
+      : "Review window ended";
 
   if (isLoading || !job) {
-    return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
   }
 
-  const percentFunded = Math.min((job.collectedAmount || 0) / job.targetAmount * 100, 100);
-  const isLeader = user?.id === job.leaderId;
+  const isCreator = user?.id === job.leaderId;
+  const isAdmin = user?.role === "ADMIN";
   const isWorker = user?.role === "WORKER";
-  const hasApplied = applications?.some(app => app.workerId === user?.id);
+  const isContributor = user?.role === "CONTRIBUTOR";
+  const canManageWorkerSelection = isCreator || isAdmin;
+  const canViewApplications = isCreator || isAdmin || isContributor;
+  const canContribute =
+    user &&
+    ["LEADER", "CONTRIBUTOR", "ADMIN"].includes(user.role) &&
+    !job.selectedWorkerId;
+  const canEditJob =
+    isCreator &&
+    !job.selectedWorkerId &&
+    !["COMPLETED", "DISPUTED"].includes(job.status);
+  const hasApplied = applications.some((a: any) => a.workerId === user?.id);
+
+  const fundingPercent = Math.min(
+    ((job.collectedAmount || 0) / job.targetAmount) * 100,
+    100,
+  );
+  const workerProgress =
+    job.status === "WORKER_SELECTED"
+      ? 33
+      : job.status === "AWAITING_VERIFICATION"
+        ? 66
+        : job.status === "UNDER_REVIEW"
+          ? 85
+          : job.status === "COMPLETED"
+            ? 100
+            : 0;
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-16">
       <Navigation />
-      
-      {/* Hero Header */}
-      <div className="bg-muted/30 border-b">
-        <div className="container mx-auto px-4 py-12">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex flex-wrap gap-3 mb-4">
-              <Badge variant="outline" className="bg-background">{job.status.replace("_", " ")}</Badge>
-              <div className="flex items-center text-sm text-muted-foreground gap-1">
-                <MapPin className="w-4 h-4" /> {job.location}
-              </div>
-              <div className="flex items-center text-sm text-muted-foreground gap-1">
-                <Calendar className="w-4 h-4" /> {job.createdAt && format(new Date(job.createdAt), "MMM d, yyyy")}
-              </div>
-            </div>
-            
-            <h1 className="text-4xl md:text-5xl font-bold font-display mb-6">{job.title}</h1>
-            
-            <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10 border border-border">
-                <AvatarFallback>{job.leader?.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="text-sm font-medium">Organized by {job.leader?.name}</p>
-                <p className="text-xs text-muted-foreground">Reputation: {job.leader?.rating?.toFixed(1)}/5.0</p>
-              </div>
+      <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">{job.title}</h1>
+            <div className="text-sm text-muted-foreground flex items-center gap-3 mt-2">
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="w-4 h-4" />
+                {job.location}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="w-4 h-4" />
+                {job.createdAt
+                  ? new Date(job.createdAt).toLocaleDateString()
+                  : ""}
+              </span>
             </div>
           </div>
+          <Badge>{job.status}</Badge>
         </div>
-      </div>
 
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="grid md:grid-cols-3 gap-8">
-          
-          {/* Main Content */}
-          <div className="md:col-span-2 space-y-8">
-            <section>
-              <h2 className="text-2xl font-bold font-display mb-4">About this Job</h2>
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{job.description}</p>
-            </section>
-
-            {/* Proof Section (Visible if completed or under review) */}
-            {(job.status === "UNDER_REVIEW" || job.status === "COMPLETED") && job.proof && (
-              <section className="bg-muted/20 p-6 rounded-xl border">
-                <h3 className="text-xl font-bold mb-4">Proof of Work</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold">Before</p>
-                    <div className="aspect-square bg-gray-200 rounded-lg overflow-hidden">
-                       <img src={job.proof.beforePhoto} alt="Before" className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold">After</p>
-                    <div className="aspect-square bg-gray-200 rounded-lg overflow-hidden">
-                       <img src={job.proof.afterPhoto} alt="After" className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold">Disposal</p>
-                    <div className="aspect-square bg-gray-200 rounded-lg overflow-hidden">
-                       <img src={job.proof.disposalPhoto} alt="Disposal" className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                </div>
-                {isLeader && job.status === "UNDER_REVIEW" && (
-                  <div className="mt-6 flex gap-4">
-                    <Button 
-                      className="w-full btn-primary"
-                      onClick={() => {
-                        updateJob({ id, status: "COMPLETED" });
-                        toast({ title: "Job Verified", description: "Funds have been released to the worker." });
-                      }}
-                    >
-                      Verify & Release Funds
-                    </Button>
-                    <Button variant="outline" className="w-full border-destructive text-destructive">
-                      Raise Dispute
-                    </Button>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* Applications List (Leader Only) */}
-            {isLeader && job.status === "FUNDING_COMPLETE" && (
-              <section>
-                <h3 className="text-xl font-bold mb-4">Worker Applications</h3>
-                <div className="space-y-3">
-                  {applications?.map(app => (
-                    <div key={app.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/30">
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarFallback>{app.worker?.name.substring(0, 2)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold">{app.worker?.name}</p>
-                          <p className="text-sm text-muted-foreground">Bid: ${app.bidAmount}</p>
-                        </div>
-                      </div>
-                      <Button size="sm" onClick={() => acceptApplicationMutation.mutate(app.id)}>
-                        Accept
-                      </Button>
-                    </div>
-                  ))}
-                  {applications?.length === 0 && <p className="text-muted-foreground">No applications yet.</p>}
-                </div>
-              </section>
-            )}
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <Card className="border-2 border-primary/10 shadow-lg">
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-6">
+            <Card>
               <CardHeader>
-                <CardTitle className="flex justify-between items-center">
-                  <span className="text-3xl font-bold text-primary">${job.collectedAmount}</span>
-                  <span className="text-sm text-muted-foreground font-normal">of ${job.targetAmount}</span>
-                </CardTitle>
-                <Progress value={percentFunded} className="h-3" />
+                <CardTitle>Job Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Funding Logic */}
-                {job.status === "FUNDING_OPEN" ? (
-                  <>
-                    <p className="text-sm text-muted-foreground">
-                      Join {job.contributions?.length || 0} others in supporting this cleanup.
-                    </p>
-                    {user ? (
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button className="w-full btn-primary text-lg h-12">
-                            Contribute Now
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Make a Contribution</DialogTitle>
-                            <DialogDescription>Mock payment integration via Razorpay</DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4 py-4">
-                             <div className="space-y-2">
-                               <label className="text-sm font-medium">Amount ($)</label>
-                               <Input 
-                                 type="number" 
-                                 value={contributionAmount} 
-                                 onChange={e => setContributionAmount(e.target.value)} 
-                               />
-                             </div>
-                             <Button 
-                               className="w-full" 
-                               onClick={() => contribute({ 
-                                 jobId: id, 
-                                 userId: user.id, 
-                                 amount: Number(contributionAmount) 
-                               })}
-                               disabled={isContributing}
-                             >
-                               {isContributing && <Loader2 className="mr-2 animate-spin" />}
-                               Pay with Razorpay
-                             </Button>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    ) : (
-                      <Link href="/auth">
-                        <Button variant="outline" className="w-full">Sign in to Contribute</Button>
-                      </Link>
-                    )}
-                  </>
-                ) : (
-                  <div className="bg-green-50 p-4 rounded-lg text-green-700 text-center font-medium border border-green-200">
-                    <CheckCircle className="w-6 h-6 mx-auto mb-2" />
-                    Funding Complete!
-                  </div>
-                )}
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                  {job.description}
+                </p>
+                <p className="text-sm">
+                  Private residential property:{" "}
+                  <b>{job.isPrivateResidentialProperty ? "Yes" : "No"}</b>
+                </p>
 
-                {/* Worker Application Logic */}
-                {isWorker && job.status === "FUNDING_COMPLETE" && !hasApplied && (
-                  <div className="pt-4 border-t">
-                     <p className="text-sm font-medium mb-2">Want to do this job?</p>
-                     <div className="flex gap-2">
-                       <Input 
-                         type="number" 
-                         placeholder="Bid Amount ($)" 
-                         value={bidAmount} 
-                         onChange={e => setBidAmount(e.target.value)}
-                         className="w-32"
-                       />
-                       <Button 
-                         className="flex-1"
-                         onClick={() => apply({ jobId: id, workerId: user.id, bidAmount: Number(bidAmount) })}
-                         disabled={isApplying || !bidAmount}
-                       >
-                         Apply
-                       </Button>
-                     </div>
-                  </div>
-                )}
-
-                {/* Worker Upload Proof Logic */}
-                {user?.id === job.selectedWorkerId && job.status === "IN_PROGRESS" && (
-                   <div className="pt-4 border-t">
-                      <p className="font-semibold mb-2">Upload Proof</p>
-                      <Button 
-                        className="w-full gap-2" 
-                        variant="secondary"
-                        onClick={() => proofMutation.mutate({
-                          jobId: id,
-                          beforePhoto: "https://images.unsplash.com/photo-1611288870280-4a331dd8636d?w=400", // Mock URL
-                          afterPhoto: "https://images.unsplash.com/photo-1581093458791-9f3c3900df4b?w=400", // Mock URL
-                          disposalPhoto: "https://images.unsplash.com/photo-1605600659908-0ef719419d41?w=400" // Mock URL
-                        })}
-                        disabled={proofMutation.isPending}
+                {canEditJob && (
+                  <div className="border rounded-lg p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-semibold">Edit Job</h3>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEditing((v) => !v)}
                       >
-                        <UploadCloud className="w-4 h-4" /> 
-                        {proofMutation.isPending ? "Uploading..." : "Upload Photos (Mock)"}
+                        {isEditing ? "Cancel" : "Edit"}
                       </Button>
-                      <p className="text-xs text-muted-foreground mt-2 text-center">Simulates uploading 3 required photos.</p>
-                   </div>
+                    </div>
+                    {isEditing && (
+                      <div className="space-y-2">
+                        <Input
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          placeholder="Title"
+                        />
+                        <Textarea
+                          value={editDescription}
+                          onChange={(e) => setEditDescription(e.target.value)}
+                          placeholder="Description"
+                        />
+                        <Input
+                          value={editLocation}
+                          onChange={(e) => setEditLocation(e.target.value)}
+                          placeholder="Location"
+                        />
+                        <Input
+                          type="number"
+                          value={editTargetAmount}
+                          onChange={(e) => setEditTargetAmount(e.target.value)}
+                          placeholder="Target amount"
+                        />
+                        <div className="flex items-center justify-between rounded border p-3">
+                          <span className="text-sm">
+                            Private residential property
+                          </span>
+                          <Switch
+                            checked={editPrivateProperty}
+                            onCheckedChange={setEditPrivateProperty}
+                          />
+                        </div>
+                        <Button
+                          disabled={isUpdatingJob}
+                          onClick={() => {
+                            updateJob(
+                              {
+                                id,
+                                title: editTitle,
+                                description: editDescription,
+                                location: editLocation,
+                                targetAmount: Number(editTargetAmount),
+                                isPrivateResidentialProperty:
+                                  editPrivateProperty,
+                              },
+                              {
+                                onSuccess: () => {
+                                  setIsEditing(false);
+                                },
+                              },
+                            );
+                          }}
+                        >
+                          Save Changes
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 )}
 
+                {isCreator &&
+                  (job.status === "AWAITING_VERIFICATION" ||
+                    job.status === "UNDER_REVIEW") && (
+                    <div className="border rounded-lg p-4 space-y-3">
+                      <h3 className="font-semibold">Verify completion</h3>
+                      <Button
+                        onClick={() =>
+                          updateJob({ id, status: "UNDER_REVIEW" })
+                        }
+                        disabled={
+                          isUpdatingJob || job.status === "UNDER_REVIEW"
+                        }
+                      >
+                        Start 24-hour review window
+                      </Button>
+                      {job.status === "UNDER_REVIEW" && (
+                        <p className="text-sm text-muted-foreground inline-flex items-center gap-1">
+                          <Clock3 className="w-4 h-4" /> {reviewText}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                {job.proof && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <img
+                      className="rounded border aspect-square object-cover"
+                      src={job.proof.beforePhoto}
+                      alt="before"
+                    />
+                    <img
+                      className="rounded border aspect-square object-cover"
+                      src={job.proof.afterPhoto}
+                      alt="after"
+                    />
+                    <img
+                      className="rounded border aspect-square object-cover"
+                      src={job.proof.disposalPhoto}
+                      alt="disposal"
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {(canViewApplications || job.selectedWorker) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Worker Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {job.selectedWorker &&
+                    (isCreator || isContributor || isAdmin) && (
+                      <div className="border rounded p-3 bg-muted/20">
+                        <p className="font-semibold mb-1">Selected Worker</p>
+                        <p className="text-sm font-medium">
+                          {job.selectedWorker.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Phone: {job.selectedWorker.phone}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Availability:{" "}
+                          {job.selectedWorker.availability || "Not specified"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Skills:{" "}
+                          {Array.isArray(job.selectedWorker.skillTags) &&
+                          job.selectedWorker.skillTags.length > 0
+                            ? job.selectedWorker.skillTags.join(", ")
+                            : "Not specified"}
+                        </p>
+                      </div>
+                    )}
+
+                  {canViewApplications && (
+                    <>
+                      <p className="text-sm font-medium">
+                        All Worker Applications
+                      </p>
+                      {applications.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No applications yet.
+                        </p>
+                      ) : (
+                        applications.map((app: any) => (
+                          <div
+                            key={app.id}
+                            className="border rounded p-3 flex items-center justify-between"
+                          >
+                            <div>
+                              <p className="font-medium">
+                                {app.worker?.name || `Worker #${app.workerId}`}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                Bid: ₹{app.bidAmount}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Phone: {app.worker?.phone || "N/A"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Availability:{" "}
+                                {app.worker?.availability || "Not specified"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Skills:{" "}
+                                {Array.isArray(app.worker?.skillTags) &&
+                                app.worker.skillTags.length > 0
+                                  ? app.worker.skillTags.join(", ")
+                                  : "Not specified"}
+                              </p>
+                            </div>
+                            {canManageWorkerSelection ? (
+                              <Button
+                                size="sm"
+                                disabled={
+                                  acceptMutation.isPending ||
+                                  (Boolean(job.selectedWorkerId) && !isAdmin)
+                                }
+                                onClick={() => acceptMutation.mutate(app.id)}
+                              >
+                                {isAdmin &&
+                                job.selectedWorkerId &&
+                                job.selectedWorkerId !== app.workerId
+                                  ? "Reassign"
+                                  : "Select"}
+                              </Button>
+                            ) : (
+                              <Badge variant="outline">Readonly</Badge>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Funding Progress</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm font-medium">
+                  ₹{job.collectedAmount || 0} / ₹{job.targetAmount}
+                </p>
+                <Progress value={fundingPercent} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  Contributors:{" "}
+                  {job.contributorCount ?? job.contributions?.length ?? 0}
+                </p>
+                {canContribute && (
+                  <div className="space-y-2">
+                    <Input
+                      type="number"
+                      value={contributionAmount}
+                      onChange={(e) => setContributionAmount(e.target.value)}
+                    />
+                    <Button
+                      className="w-full"
+                      disabled={isContributing}
+                      onClick={() =>
+                        contribute({
+                          jobId: id,
+                          amount: Number(contributionAmount),
+                        })
+                      }
+                    >
+                      Razorpay: Contribute
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Contributors</CardTitle>
+                <CardTitle>Worker Progress</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {job.contributions && job.contributions.length > 0 ? (
-                    job.contributions.map((c, i) => (
-                      <div key={i} className="flex justify-between items-center text-sm">
-                        <div className="flex items-center gap-2">
-                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
-                             {/* Ideally we fetch user name, but minimal schema prevents full join here effortlessly */}
-                             U{c.userId}
-                           </div>
-                           <span className="font-medium">User #{c.userId}</span>
-                        </div>
-                        <span className="font-bold text-green-600">+${c.amount}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Be the first to contribute!</p>
-                  )}
-                </div>
+              <CardContent className="space-y-2">
+                <Progress value={workerProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  Current state: {job.status}
+                </p>
               </CardContent>
             </Card>
-          </div>
 
+            {isWorker && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Worker Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {!hasApplied &&
+                    ["FUNDING_OPEN", "FUNDING_COMPLETE"].includes(
+                      job.status,
+                    ) && (
+                      <>
+                        <Input
+                          type="number"
+                          value={bidAmount}
+                          onChange={(e) => setBidAmount(e.target.value)}
+                          placeholder="Bid amount"
+                        />
+                        <Button
+                          disabled={isApplying || !bidAmount}
+                          onClick={() =>
+                            apply({ jobId: id, bidAmount: Number(bidAmount) })
+                          }
+                        >
+                          Apply for Job
+                        </Button>
+                      </>
+                    )}
+
+                  {user?.id === job.selectedWorkerId &&
+                    ["WORKER_SELECTED", "IN_PROGRESS"].includes(job.status) && (
+                      <div className="space-y-2">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) =>
+                            setBeforeFile(e.target.files?.[0] ?? null)
+                          }
+                        />
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) =>
+                            setAfterFile(e.target.files?.[0] ?? null)
+                          }
+                        />
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) =>
+                            setDisposalFile(e.target.files?.[0] ?? null)
+                          }
+                        />
+                        <Button
+                          className="w-full"
+                          disabled={proofMutation.isPending}
+                          onClick={async () => {
+                            if (!beforeFile || !afterFile || !disposalFile) {
+                              toast({
+                                title: "All photos required",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            const [beforePhoto, afterPhoto, disposalPhoto] =
+                              await Promise.all([
+                                toDataUrl(beforeFile),
+                                toDataUrl(afterFile),
+                                toDataUrl(disposalFile),
+                              ]);
+                            proofMutation.mutate({
+                              jobId: id,
+                              beforePhoto,
+                              afterPhoto,
+                              disposalPhoto,
+                              metadata: {
+                                source: "web",
+                                timestamp: new Date().toISOString(),
+                              },
+                              capturedAt: new Date().toISOString(),
+                            });
+                          }}
+                        >
+                          <UploadCloud className="w-4 h-4 mr-2" /> Upload Proof
+                        </Button>
+                      </div>
+                    )}
+                </CardContent>
+              </Card>
+            )}
+
+            {job.status === "UNDER_REVIEW" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Raise Dispute</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Textarea
+                    value={disputeReason}
+                    onChange={(e) => setDisputeReason(e.target.value)}
+                    placeholder="Provide reason"
+                  />
+                  <Button
+                    variant="destructive"
+                    disabled={!disputeReason || disputeMutation.isPending}
+                    onClick={() =>
+                      disputeMutation.mutate({
+                        jobId: id,
+                        reason: disputeReason,
+                      })
+                    }
+                  >
+                    Submit Dispute
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Share Job</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <a href={whatsappUrl} target="_blank" rel="noreferrer">
+                  <Button className="w-full" variant="outline">
+                    <Share2 className="w-4 h-4 mr-2" />
+                    Share on WhatsApp
+                  </Button>
+                </a>
+                <a href={xShareUrl} target="_blank" rel="noreferrer">
+                  <Button className="w-full" variant="outline">
+                    Share on Social
+                  </Button>
+                </a>
+              </CardContent>
+            </Card>
+
+            {!user && (
+              <Link href="/auth">
+                <Button className="w-full">Sign in to participate</Button>
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </div>
