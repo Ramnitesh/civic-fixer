@@ -26,6 +26,14 @@ import createMemoryStore from "memorystore";
 
 const MemoryStore = createMemoryStore(session);
 
+export type JobProofDraft = {
+  jobId: number;
+  beforePhoto?: string;
+  afterPhoto?: string;
+  disposalPhoto?: string;
+  updatedAt: string;
+};
+
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
@@ -81,6 +89,15 @@ export interface IStorage {
   // Proofs
   createJobProof(proof: InsertJobProof): Promise<JobProof>;
   getJobProof(jobId: number): Promise<JobProof | undefined>;
+  updateJobProofMetadata(
+    jobId: number,
+    metadata: Record<string, unknown>,
+  ): Promise<JobProof>;
+  upsertJobProofDraft(
+    input: Omit<JobProofDraft, "updatedAt">,
+  ): Promise<JobProofDraft>;
+  getJobProofDraft(jobId: number): Promise<JobProofDraft | undefined>;
+  clearJobProofDraft(jobId: number): Promise<void>;
 
   // Disputes
   createDispute(dispute: InsertDispute): Promise<Dispute>;
@@ -90,6 +107,7 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   sessionStore: session.Store;
+  private proofDrafts = new Map<number, JobProofDraft>();
 
   constructor() {
     this.sessionStore = new MemoryStore({
@@ -325,6 +343,42 @@ export class DatabaseStorage implements IStorage {
       .from(jobProofs)
       .where(eq(jobProofs.jobId, jobId));
     return proof;
+  }
+
+  async updateJobProofMetadata(
+    jobId: number,
+    metadata: Record<string, unknown>,
+  ): Promise<JobProof> {
+    const [updated] = await db
+      .update(jobProofs)
+      .set({ metadata })
+      .where(eq(jobProofs.jobId, jobId))
+      .returning();
+
+    return updated;
+  }
+
+  async upsertJobProofDraft(
+    input: Omit<JobProofDraft, "updatedAt">,
+  ): Promise<JobProofDraft> {
+    const existing = this.proofDrafts.get(input.jobId);
+    const merged: JobProofDraft = {
+      jobId: input.jobId,
+      beforePhoto: input.beforePhoto ?? existing?.beforePhoto,
+      afterPhoto: input.afterPhoto ?? existing?.afterPhoto,
+      disposalPhoto: input.disposalPhoto ?? existing?.disposalPhoto,
+      updatedAt: new Date().toISOString(),
+    };
+    this.proofDrafts.set(input.jobId, merged);
+    return merged;
+  }
+
+  async getJobProofDraft(jobId: number): Promise<JobProofDraft | undefined> {
+    return this.proofDrafts.get(jobId);
+  }
+
+  async clearJobProofDraft(jobId: number): Promise<void> {
+    this.proofDrafts.delete(jobId);
   }
 
   // Disputes

@@ -5,9 +5,28 @@ import { setupAuth } from "./auth";
 import { api } from "@shared/routes";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
+import { createHash } from "crypto";
 
 const scryptAsync = promisify(scrypt);
 const REVIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function getCloudinaryConfig() {
+  const cloudinaryUrl = process.env.CLOUDINARY_URL;
+  if (!cloudinaryUrl) {
+    throw new Error("CLOUDINARY_URL is not configured");
+  }
+
+  const parsed = new URL(cloudinaryUrl);
+  const cloudName = parsed.hostname;
+  const apiKey = parsed.username;
+  const apiSecret = parsed.password;
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error("Invalid CLOUDINARY_URL format");
+  }
+
+  return { cloudName, apiKey, apiSecret };
+}
 
 async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
@@ -158,6 +177,7 @@ export async function registerRoutes(
       ? await storage.getUser(job.selectedWorkerId)
       : null;
     const proof = await storage.getJobProof(job.id);
+    const proofDraft = await storage.getJobProofDraft(job.id);
     const disputes = await storage.getDisputesByJob(job.id);
     const contributorCount = await storage.getContributorCount(job.id);
     const contributorIds = Array.from(
@@ -175,6 +195,7 @@ export async function registerRoutes(
       contributions,
       selectedWorker,
       proof,
+      proofDraft: proofDraft ?? null,
       disputes,
       contributorCount,
       contributorProfiles,
@@ -186,6 +207,7 @@ export async function registerRoutes(
 
     const id = Number(req.params.id);
     const updates = api.jobs.update.input.parse(req.body);
+    const { workerSubmissionMessage, ...jobUpdates } = updates;
     const job = await storage.getJob(id);
     if (!job) return res.status(404).json({ message: "Job not found" });
 
@@ -197,6 +219,12 @@ export async function registerRoutes(
       ["IN_PROGRESS", "AWAITING_VERIFICATION"].includes(updates.status);
 
     if (isWorkflowStatusUpdate) {
+      if (job.selectedWorkerId !== req.user!.id) {
+        return res.status(403).json({
+          message: "Only selected worker can update workflow status",
+        });
+      }
+
       if (
         updates.status === "IN_PROGRESS" &&
         job.status !== "WORKER_SELECTED"
@@ -212,6 +240,30 @@ export async function registerRoutes(
         return res
           .status(400)
           .json({ message: "Can complete work only after it is in progress" });
+      }
+
+      if (updates.status === "AWAITING_VERIFICATION") {
+        const proof = await storage.getJobProof(job.id);
+        if (!proof) {
+          return res
+            .status(400)
+            .json({ message: "Upload all proof before submitting for review" });
+        }
+
+        const note = workerSubmissionMessage?.trim();
+        if (note) {
+          const existingMetadata =
+            proof.metadata && typeof proof.metadata === "object"
+              ? proof.metadata
+              : {};
+
+          await storage.updateJobProofMetadata(job.id, {
+            ...(existingMetadata as Record<string, unknown>),
+            workerSubmissionMessage: note,
+            workerSubmissionBy: req.user!.id,
+            workerSubmissionAt: new Date().toISOString(),
+          });
+        }
       }
 
       const updated = await storage.updateJob(id, {
@@ -272,7 +324,7 @@ export async function registerRoutes(
       return res.json(updated);
     }
 
-    const updated = await storage.updateJob(id, updates);
+    const updated = await storage.updateJob(id, jobUpdates);
     res.json(updated);
   });
 
@@ -460,9 +512,66 @@ export async function registerRoutes(
       ...input,
       capturedAt: input.capturedAt ? new Date(input.capturedAt) : new Date(),
     });
-    await storage.updateJob(input.jobId, { status: "AWAITING_VERIFICATION" });
+    await storage.clearJobProofDraft(input.jobId);
 
     res.status(201).json(proof);
+  });
+
+  app.post(api.proofs.draftUpsert.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const input = api.proofs.draftUpsert.input.parse(req.body);
+
+    const job = await storage.getJob(input.jobId);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+    if (job.selectedWorkerId !== req.user!.id) {
+      return res
+        .status(403)
+        .json({ message: "Only the selected worker can upload proof" });
+    }
+
+    const existingProof = await storage.getJobProof(input.jobId);
+    if (existingProof) {
+      return res
+        .status(409)
+        .json({ message: "Proof is already uploaded for this job" });
+    }
+
+    const draft = await storage.upsertJobProofDraft({
+      jobId: input.jobId,
+      beforePhoto: input.beforePhoto,
+      afterPhoto: input.afterPhoto,
+      disposalPhoto: input.disposalPhoto,
+    });
+
+    return res.json(draft);
+  });
+
+  app.post("/api/uploads/cloudinary/signature", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    let config: { cloudName: string; apiKey: string; apiSecret: string };
+    try {
+      config = getCloudinaryConfig();
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          error instanceof Error ? error.message : "Cloudinary misconfigured",
+      });
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const folder = "home/civicfix/worker/proof";
+    const signature = createHash("sha1")
+      .update(`folder=${folder}&timestamp=${timestamp}${config.apiSecret}`)
+      .digest("hex");
+
+    return res.json({
+      cloudName: config.cloudName,
+      apiKey: config.apiKey,
+      timestamp,
+      folder,
+      signature,
+    });
   });
 
   app.post(api.disputes.create.path, async (req, res) => {

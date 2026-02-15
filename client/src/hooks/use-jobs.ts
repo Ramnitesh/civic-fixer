@@ -95,6 +95,7 @@ export function useUpdateJob() {
       isPrivateResidentialProperty?: boolean;
       status?: Job["status"];
       selectedWorkerId?: number;
+      workerSubmissionMessage?: string;
     }) => {
       const url = buildUrl(api.jobs.update.path, { id });
       const res = await fetch(url, {

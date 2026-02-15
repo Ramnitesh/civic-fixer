@@ -16,6 +16,7 @@ import {
   UploadCloud,
   Share2,
   Clock3,
+  FileText,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,17 @@ export default function JobDetailsPage() {
   const [beforeFile, setBeforeFile] = useState<File | null>(null);
   const [afterFile, setAfterFile] = useState<File | null>(null);
   const [disposalFile, setDisposalFile] = useState<File | null>(null);
+  const [beforeUploadedUrl, setBeforeUploadedUrl] = useState<string | null>(
+    null,
+  );
+  const [afterUploadedUrl, setAfterUploadedUrl] = useState<string | null>(null);
+  const [disposalUploadedUrl, setDisposalUploadedUrl] = useState<string | null>(
+    null,
+  );
+  const [isUploadingBefore, setIsUploadingBefore] = useState(false);
+  const [isUploadingAfter, setIsUploadingAfter] = useState(false);
+  const [isUploadingDisposal, setIsUploadingDisposal] = useState(false);
+  const [workerSubmissionMessage, setWorkerSubmissionMessage] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
 
   const [isEditing, setIsEditing] = useState(false);
@@ -66,6 +78,28 @@ export default function JobDetailsPage() {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    if (!job?.proof) return;
+    setBeforeUploadedUrl(job.proof.beforePhoto);
+    setAfterUploadedUrl(job.proof.afterPhoto);
+    setDisposalUploadedUrl(job.proof.disposalPhoto);
+  }, [job?.proof]);
+
+  useEffect(() => {
+    if (job?.proofDraft) {
+      setBeforeUploadedUrl(job.proofDraft.beforePhoto ?? null);
+      setAfterUploadedUrl(job.proofDraft.afterPhoto ?? null);
+      setDisposalUploadedUrl(job.proofDraft.disposalPhoto ?? null);
+      return;
+    }
+
+    if (job?.proof) {
+      setBeforeUploadedUrl(job.proof.beforePhoto);
+      setAfterUploadedUrl(job.proof.afterPhoto);
+      setDisposalUploadedUrl(job.proof.disposalPhoto);
+    }
+  }, [job?.proofDraft, job?.proof]);
 
   const proofMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -167,17 +201,250 @@ export default function JobDetailsPage() {
     },
   });
 
-  const toDataUrl = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+  const uploadToCloudinary = async (file: File) => {
+    const signatureResponse = await fetch("/api/uploads/cloudinary/signature", {
+      method: "POST",
     });
+    const signatureResult = await signatureResponse.json().catch(() => ({}));
+    if (!signatureResponse.ok) {
+      throw new Error(
+        signatureResult?.message || "Unable to initialize Cloudinary upload",
+      );
+    }
+
+    const { cloudName, apiKey, timestamp, signature } = signatureResult || {};
+    const folder = signatureResult?.folder as string | undefined;
+    if (!cloudName || !apiKey || !timestamp || !signature || !folder) {
+      throw new Error("Invalid Cloudinary upload signature response");
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("api_key", String(apiKey));
+    formData.append("timestamp", String(timestamp));
+    formData.append("signature", String(signature));
+    formData.append("folder", folder);
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.secure_url) {
+      throw new Error(
+        result?.error?.message || "Failed to upload file to Cloudinary",
+      );
+    }
+
+    return {
+      url: String(result.secure_url),
+      resourceType: String(result.resource_type || "raw"),
+      format: String(result.format || ""),
+      bytes: Number(result.bytes || 0),
+      originalFilename: String(result.original_filename || file.name),
+      publicId: String(result.public_id || ""),
+    };
+  };
+
+  const getProofMediaType = (url: string) => {
+    const normalized = url.toLowerCase();
+    if (normalized.includes("/video/upload/")) return "video" as const;
+    if (normalized.endsWith(".pdf") || normalized.includes("/raw/upload/")) {
+      return "pdf" as const;
+    }
+    return "image" as const;
+  };
 
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`Help fund this cleanup job: ${shareUrl}`)}`;
   const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`Support this cleanup job: ${shareUrl}`)}`;
+
+  const proofMedia = [
+    {
+      label: "Before",
+      url: job?.proof?.beforePhoto || beforeUploadedUrl,
+    },
+    {
+      label: "After",
+      url: job?.proof?.afterPhoto || afterUploadedUrl,
+    },
+    {
+      label: "Disposal",
+      url: job?.proof?.disposalPhoto || disposalUploadedUrl,
+    },
+  ];
+  const hasAnyProofMedia = proofMedia.some((item) => Boolean(item.url));
+  const beforeStepDone = Boolean(proofMedia[0]?.url);
+  const afterStepDone = Boolean(proofMedia[1]?.url);
+  const disposalStepDone = Boolean(proofMedia[2]?.url);
+  const shouldShowStepProgress =
+    hasAnyProofMedia ||
+    Boolean(job?.selectedWorkerId) ||
+    [
+      "WORKER_SELECTED",
+      "IN_PROGRESS",
+      "AWAITING_VERIFICATION",
+      "UNDER_REVIEW",
+      "COMPLETED",
+      "DISPUTED",
+    ].includes(String(job?.status || ""));
+  const proofMetadata =
+    (job?.proof?.metadata as Record<string, unknown> | undefined) ?? {};
+  const workerSubmittedNote =
+    typeof proofMetadata.workerSubmissionMessage === "string"
+      ? proofMetadata.workerSubmissionMessage
+      : "";
+
+  const updateJobStatusDirect = async (status: "IN_PROGRESS") => {
+    const res = await fetch(api.jobs.update.path.replace(":id", String(id)), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+
+    if (!res.ok) {
+      const message =
+        (await res.json().catch(() => null))?.message ??
+        "Failed to update job status";
+      throw new Error(message);
+    }
+
+    await queryClient.invalidateQueries({ queryKey: [api.jobs.get.path, id] });
+  };
+
+  const uploadBeforeProof = async () => {
+    if (!beforeFile) {
+      toast({ title: "Select before file first", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingBefore(true);
+    try {
+      if (job.status === "WORKER_SELECTED") {
+        await updateJobStatusDirect("IN_PROGRESS");
+      }
+      const asset = await uploadToCloudinary(beforeFile);
+      setBeforeUploadedUrl(asset.url);
+      await fetch(api.proofs.draftUpsert.path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: id, beforePhoto: asset.url }),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: [api.jobs.get.path, id],
+      });
+      toast({
+        title: "Before proof uploaded",
+        description: "Step 1 complete. Continue with After proof.",
+      });
+    } catch (err) {
+      toast({
+        title: "Before upload failed",
+        description: err instanceof Error ? err.message : "Upload failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingBefore(false);
+    }
+  };
+
+  const uploadAfterProof = async () => {
+    if (!beforeUploadedUrl) {
+      toast({
+        title: "Upload before proof first",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!afterFile) {
+      toast({ title: "Select after file first", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingAfter(true);
+    try {
+      const asset = await uploadToCloudinary(afterFile);
+      setAfterUploadedUrl(asset.url);
+      await fetch(api.proofs.draftUpsert.path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: id, afterPhoto: asset.url }),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: [api.jobs.get.path, id],
+      });
+      toast({
+        title: "After proof uploaded",
+        description: "Step 2 complete. Continue with Disposal proof.",
+      });
+    } catch (err) {
+      toast({
+        title: "After upload failed",
+        description: err instanceof Error ? err.message : "Upload failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingAfter(false);
+    }
+  };
+
+  const uploadDisposalProof = async () => {
+    if (!beforeUploadedUrl || !afterUploadedUrl) {
+      toast({
+        title: "Upload before and after proof first",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!disposalFile) {
+      toast({ title: "Select disposal file first", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingDisposal(true);
+    try {
+      const disposalAsset = await uploadToCloudinary(disposalFile);
+      setDisposalUploadedUrl(disposalAsset.url);
+
+      await fetch(api.proofs.draftUpsert.path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: id,
+          disposalPhoto: disposalAsset.url,
+        }),
+      });
+
+      proofMutation.mutate({
+        jobId: id,
+        beforePhoto: beforeUploadedUrl,
+        afterPhoto: afterUploadedUrl,
+        disposalPhoto: disposalAsset.url,
+        metadata: {
+          source: "web",
+          timestamp: new Date().toISOString(),
+          cloudinary: {
+            beforeUrl: beforeUploadedUrl,
+            afterUrl: afterUploadedUrl,
+            disposal: disposalAsset,
+          },
+        },
+        capturedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      toast({
+        title: "Disposal upload failed",
+        description: err instanceof Error ? err.message : "Upload failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingDisposal(false);
+    }
+  };
 
   const reviewRemainingMs = useMemo(() => {
     if (!job?.reviewDeadline) return 0;
@@ -364,23 +631,101 @@ export default function JobDetailsPage() {
                     </div>
                   )}
 
-                {job.proof && (
-                  <div className="grid grid-cols-3 gap-3">
-                    <img
-                      className="rounded border aspect-square object-cover"
-                      src={job.proof.beforePhoto}
-                      alt="before"
-                    />
-                    <img
-                      className="rounded border aspect-square object-cover"
-                      src={job.proof.afterPhoto}
-                      alt="after"
-                    />
-                    <img
-                      className="rounded border aspect-square object-cover"
-                      src={job.proof.disposalPhoto}
-                      alt="disposal"
-                    />
+                {hasAnyProofMedia && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {proofMedia.map((media) => {
+                      if (!media.url) {
+                        return (
+                          <div
+                            key={media.label}
+                            className="rounded border p-4 text-xs text-muted-foreground"
+                          >
+                            <p className="font-medium text-foreground mb-1">
+                              {media.label}
+                            </p>
+                            Not uploaded yet
+                          </div>
+                        );
+                      }
+
+                      const mediaType = getProofMediaType(media.url);
+
+                      if (mediaType === "video") {
+                        return (
+                          <div
+                            key={media.label}
+                            className="rounded border p-2 space-y-2"
+                          >
+                            <p className="text-xs font-medium">{media.label}</p>
+                            <video
+                              className="rounded w-full max-h-56 bg-black"
+                              controls
+                              src={media.url}
+                            />
+                          </div>
+                        );
+                      }
+
+                      if (mediaType === "pdf") {
+                        return (
+                          <a
+                            key={media.label}
+                            href={media.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded border p-4 flex flex-col items-center justify-center gap-2 text-center hover:bg-muted/40 transition-colors"
+                          >
+                            <FileText className="w-8 h-8" />
+                            <p className="text-xs font-medium">
+                              {media.label} (PDF)
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Open file
+                            </p>
+                          </a>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={media.label}
+                          className="rounded border p-2 space-y-2"
+                        >
+                          <p className="text-xs font-medium">{media.label}</p>
+                          <img
+                            className="rounded border aspect-square object-cover"
+                            src={media.url}
+                            alt={media.label.toLowerCase()}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {shouldShowStepProgress && (
+                  <div className="rounded border p-3 space-y-1">
+                    <p className="text-sm font-semibold">Step Progress</p>
+                    <p className="text-xs text-muted-foreground">
+                      Before: {beforeStepDone ? "Uploaded" : "Pending"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      After: {afterStepDone ? "Uploaded" : "Pending"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Disposal: {disposalStepDone ? "Uploaded" : "Pending"}
+                    </p>
+                  </div>
+                )}
+
+                {workerSubmittedNote && (
+                  <div className="rounded border p-3 space-y-1 bg-muted/20">
+                    <p className="text-sm font-semibold">
+                      Worker submission message
+                    </p>
+                    <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                      {workerSubmittedNote}
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -603,7 +948,7 @@ export default function JobDetailsPage() {
                     job.status === "WORKER_SELECTED" && (
                       <Button
                         variant="secondary"
-                        disabled={isUpdatingJob}
+                        disabled={isUpdatingJob || Boolean(beforeUploadedUrl)}
                         onClick={() => {
                           updateJob(
                             { id, status: "IN_PROGRESS" },
@@ -624,92 +969,155 @@ export default function JobDetailsPage() {
                     )}
 
                   {user?.id === job.selectedWorkerId &&
-                    job.status === "IN_PROGRESS" && (
-                      <Button
-                        variant="secondary"
-                        disabled={isUpdatingJob}
-                        onClick={() => {
-                          updateJob(
-                            { id, status: "AWAITING_VERIFICATION" },
-                            {
-                              onSuccess: () => {
-                                toast({
-                                  title: "Work marked completed",
-                                  description:
-                                    "Status updated to AWAITING_VERIFICATION.",
-                                });
-                              },
-                            },
-                          );
-                        }}
-                      >
-                        Mark as Completed
-                      </Button>
-                    )}
-
-                  {user?.id === job.selectedWorkerId &&
-                    ["WORKER_SELECTED", "IN_PROGRESS"].includes(job.status) && (
+                    ["WORKER_SELECTED", "IN_PROGRESS"].includes(job.status) &&
+                    !job.proof && (
                       <div className="space-y-2">
+                        <p className="text-sm font-semibold">
+                          Step 1: Before Proof
+                        </p>
                         <Input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,video/*,application/pdf"
+                          disabled={Boolean(beforeUploadedUrl)}
                           onChange={(e) =>
                             setBeforeFile(e.target.files?.[0] ?? null)
                           }
                         />
+                        <Button
+                          variant="secondary"
+                          disabled={
+                            isUploadingBefore || Boolean(beforeUploadedUrl)
+                          }
+                          onClick={uploadBeforeProof}
+                        >
+                          Upload Before (Start Work)
+                        </Button>
+
+                        <p className="text-sm font-semibold mt-3">
+                          Step 2: After Proof
+                        </p>
                         <Input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,video/*,application/pdf"
+                          disabled={
+                            !beforeUploadedUrl || Boolean(afterUploadedUrl)
+                          }
                           onChange={(e) =>
                             setAfterFile(e.target.files?.[0] ?? null)
                           }
                         />
+                        <Button
+                          variant="secondary"
+                          className="w-full"
+                          disabled={
+                            !beforeUploadedUrl ||
+                            isUploadingAfter ||
+                            Boolean(afterUploadedUrl)
+                          }
+                          onClick={uploadAfterProof}
+                        >
+                          Upload After (Next)
+                        </Button>
+
+                        <p className="text-sm font-semibold mt-3">
+                          Step 3: Disposal Proof
+                        </p>
                         <Input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,video/*,application/pdf"
+                          disabled={!beforeUploadedUrl || !afterUploadedUrl}
                           onChange={(e) =>
                             setDisposalFile(e.target.files?.[0] ?? null)
                           }
                         />
+                        <p className="text-xs text-muted-foreground">
+                          You can upload image, video, or PDF files. Upload in
+                          sequence: Before → After → Disposal.
+                        </p>
                         <Button
                           className="w-full"
-                          disabled={proofMutation.isPending}
-                          onClick={async () => {
-                            if (!beforeFile || !afterFile || !disposalFile) {
-                              toast({
-                                title: "All photos required",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            const [beforePhoto, afterPhoto, disposalPhoto] =
-                              await Promise.all([
-                                toDataUrl(beforeFile),
-                                toDataUrl(afterFile),
-                                toDataUrl(disposalFile),
-                              ]);
-                            proofMutation.mutate({
-                              jobId: id,
-                              beforePhoto,
-                              afterPhoto,
-                              disposalPhoto,
-                              metadata: {
-                                source: "web",
-                                timestamp: new Date().toISOString(),
+                          disabled={
+                            !beforeUploadedUrl ||
+                            !afterUploadedUrl ||
+                            proofMutation.isPending ||
+                            isUploadingDisposal
+                          }
+                          onClick={uploadDisposalProof}
+                        >
+                          <UploadCloud className="w-4 h-4 mr-2" />
+                          Upload Disposal & Submit
+                        </Button>
+
+                        <div className="space-y-2 pt-2">
+                          <p className="text-xs font-medium">Step progress</p>
+                          <p className="text-xs text-muted-foreground">
+                            Before: {beforeUploadedUrl ? "Uploaded" : "Pending"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            After: {afterUploadedUrl ? "Uploaded" : "Pending"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Disposal:{" "}
+                            {disposalUploadedUrl ? "Uploaded" : "Pending"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                  {user?.id === job.selectedWorkerId &&
+                    job.status === "IN_PROGRESS" &&
+                    job.proof && (
+                      <div className="space-y-2 border rounded-lg p-3">
+                        <p className="text-sm font-medium">
+                          All proof steps are uploaded.
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Submit this job so the leader can review and verify
+                          it.
+                        </p>
+                        <Textarea
+                          placeholder="Write message for leader (optional)"
+                          value={workerSubmissionMessage}
+                          onChange={(e) =>
+                            setWorkerSubmissionMessage(e.target.value)
+                          }
+                        />
+                        <Button
+                          className="w-full"
+                          disabled={isUpdatingJob}
+                          onClick={() => {
+                            updateJob(
+                              {
+                                id,
+                                status: "AWAITING_VERIFICATION",
+                                workerSubmissionMessage,
                               },
-                              capturedAt: new Date().toISOString(),
-                            });
+                              {
+                                onSuccess: () => {
+                                  setWorkerSubmissionMessage("");
+                                  toast({
+                                    title: "Submitted for review",
+                                    description:
+                                      "Leader can now review your submitted proof.",
+                                  });
+                                },
+                              },
+                            );
                           }}
                         >
-                          <UploadCloud className="w-4 h-4 mr-2" /> Upload Proof
+                          Submit Job for Leader Review
                         </Button>
+                        <p className="text-xs text-muted-foreground">
+                          Message: Once you submit, the leader will be notified
+                          to review your job completion proof.
+                        </p>
                       </div>
                     )}
                 </CardContent>
               </Card>
             )}
 
-            {job.status === "UNDER_REVIEW" && (
+            {job.status === "UNDER_REVIEW" && !!user && !isWorker && (
               <Card>
                 <CardHeader>
                   <CardTitle>Raise Dispute</CardTitle>

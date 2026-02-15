@@ -44,6 +44,13 @@ const createProofInput = z.object({
   capturedAt: z.string().datetime().optional(),
 });
 
+const upsertProofDraftInput = z.object({
+  jobId: z.number(),
+  beforePhoto: z.string().min(1).optional(),
+  afterPhoto: z.string().min(1).optional(),
+  disposalPhoto: z.string().min(1).optional(),
+});
+
 const createDisputeInput = z.object({
   jobId: z.number(),
   reason: z.string().min(1),
@@ -116,6 +123,12 @@ export const api = {
             contributorProfiles?: (typeof users.$inferSelect)[];
             selectedWorker?: typeof users.$inferSelect | null;
             proof?: typeof jobProofs.$inferSelect | null;
+            proofDraft?: {
+              beforePhoto?: string;
+              afterPhoto?: string;
+              disposalPhoto?: string;
+              updatedAt: string;
+            } | null;
             disputes?: (typeof disputes.$inferSelect)[];
             contributorCount?: number;
           }
@@ -146,6 +159,7 @@ export const api = {
             ])
             .optional(),
           selectedWorkerId: z.number().optional(),
+          workerSubmissionMessage: z.string().max(2000).optional(),
         })
         .strict(),
       responses: { 200: z.custom<typeof jobs.$inferSelect>() },
@@ -199,6 +213,20 @@ export const api = {
       path: "/api/proofs" as const,
       input: createProofInput,
       responses: { 201: z.custom<typeof jobProofs.$inferSelect>() },
+    },
+    draftUpsert: {
+      method: "POST" as const,
+      path: "/api/proofs/draft" as const,
+      input: upsertProofDraftInput,
+      responses: {
+        200: z.object({
+          jobId: z.number(),
+          beforePhoto: z.string().optional(),
+          afterPhoto: z.string().optional(),
+          disposalPhoto: z.string().optional(),
+          updatedAt: z.string(),
+        }),
+      },
     },
   },
   disputes: {
