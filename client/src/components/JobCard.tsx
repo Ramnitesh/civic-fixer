@@ -1,4 +1,9 @@
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -12,8 +17,12 @@ interface JobCardProps {
 }
 
 export function JobCard({ job }: JobCardProps) {
-  const percentFunded = Math.min((job.collectedAmount || 0) / job.targetAmount * 100, 100);
-  
+  const percentFunded = Math.min(
+    ((job.collectedAmount || 0) / job.targetAmount) * 100,
+    100,
+  );
+  const jobImageUrl = (job as any)?.imageUrl as string | null | undefined;
+
   const statusColors: Record<string, string> = {
     FUNDING_OPEN: "bg-blue-500/10 text-blue-600 border-blue-200",
     FUNDING_COMPLETE: "bg-green-500/10 text-green-600 border-green-200",
@@ -26,12 +35,22 @@ export function JobCard({ job }: JobCardProps) {
     <Card className="card-hover group border-border/50 overflow-hidden flex flex-col h-full">
       <CardHeader className="p-0">
         <div className="h-40 bg-gradient-to-br from-gray-100 to-gray-200 relative overflow-hidden">
-          {/* Mock image placeholder using descriptive pattern */}
-          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/30 font-display font-bold text-4xl transform -rotate-12 select-none group-hover:scale-110 transition-transform duration-500">
-            CLEANUP
-          </div>
+          {jobImageUrl ? (
+            <img
+              src={jobImageUrl}
+              alt={job.title}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/30 font-display font-bold text-4xl transform -rotate-12 select-none group-hover:scale-110 transition-transform duration-500">
+              CLEANUP
+            </div>
+          )}
           <div className="absolute top-4 right-4">
-            <Badge variant="outline" className={`${statusColors[job.status] || "bg-gray-100"} backdrop-blur-md font-semibold px-3 py-1`}>
+            <Badge
+              variant="outline"
+              className={`${statusColors[job.status] || "bg-gray-100"} backdrop-blur-md font-semibold px-3 py-1`}
+            >
               {job.status.replace("_", " ")}
             </Badge>
           </div>
@@ -54,8 +73,10 @@ export function JobCard({ job }: JobCardProps) {
 
         <div className="mt-auto space-y-3">
           <div className="flex justify-between text-sm font-medium">
-            <span>${job.collectedAmount || 0} raised</span>
-            <span className="text-muted-foreground">Goal: ${job.targetAmount}</span>
+            <span>₹{job.collectedAmount || 0} raised</span>
+            <span className="text-muted-foreground">
+              Goal: ₹{job.targetAmount}
+            </span>
           </div>
           <Progress value={percentFunded} className="h-2 bg-secondary/10" />
         </div>
@@ -64,10 +85,16 @@ export function JobCard({ job }: JobCardProps) {
       <CardFooter className="p-6 pt-0 border-t bg-muted/20 mt-auto flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-muted-foreground pt-4">
           <Calendar className="w-3 h-3" />
-          {job.createdAt ? format(new Date(job.createdAt), "MMM d, yyyy") : "Recent"}
+          {job.createdAt
+            ? format(new Date(job.createdAt), "MMM d, yyyy")
+            : "Recent"}
         </div>
         <Link href={`/jobs/${job.id}`}>
-          <Button variant="ghost" size="sm" className="gap-2 hover:text-primary hover:bg-primary/5 mt-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 hover:text-primary hover:bg-primary/5 mt-4"
+          >
             View Details <ArrowRight className="w-4 h-4" />
           </Button>
         </Link>

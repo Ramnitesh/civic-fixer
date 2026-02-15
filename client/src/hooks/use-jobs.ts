@@ -48,6 +48,7 @@ export function useCreateJob() {
       location: string;
       targetAmount: number;
       isPrivateResidentialProperty: boolean;
+      imageUrl?: string;
     }) => {
       const res = await fetch(api.jobs.create.path, {
         method: "POST",

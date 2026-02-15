@@ -27,6 +27,8 @@ import {
 import { useLocation } from "wouter";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 // Override schema for form validation to handle string -> number coercion
 const formSchema = insertJobSchema.extend({
@@ -35,11 +37,15 @@ const formSchema = insertJobSchema.extend({
     .positive("Target amount must be greater than 0")
     .max(10000, "Maximum amount is ₹10,000"),
   leaderId: z.number().optional(), // Injected by backend/hook logic usually, but here we can rely on backend to assign from session
+  imageUrl: z.string().url().optional(),
 });
 
 export default function CreateJobPage() {
   const { mutate: createJob, isPending } = useCreateJob();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [jobImageFile, setJobImageFile] = useState<File | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -49,14 +55,80 @@ export default function CreateJobPage() {
       location: "",
       targetAmount: undefined,
       isPrivateResidentialProperty: false,
+      imageUrl: undefined,
     },
   });
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
-    // We assume backend attaches leaderId from session
-    createJob(data as any, {
-      onSuccess: () => setLocation("/dashboard"),
+  const uploadToCloudinary = async (file: File) => {
+    const signatureResponse = await fetch("/api/uploads/cloudinary/signature", {
+      method: "POST",
     });
+    const signatureResult = await signatureResponse.json().catch(() => ({}));
+    if (!signatureResponse.ok) {
+      throw new Error(
+        signatureResult?.message || "Unable to initialize Cloudinary upload",
+      );
+    }
+
+    const { cloudName, apiKey, timestamp, signature } = signatureResult || {};
+    const folder = signatureResult?.folder as string | undefined;
+    if (!cloudName || !apiKey || !timestamp || !signature || !folder) {
+      throw new Error("Invalid Cloudinary upload signature response");
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("api_key", String(apiKey));
+    formData.append("timestamp", String(timestamp));
+    formData.append("signature", String(signature));
+    formData.append("folder", folder);
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.secure_url) {
+      throw new Error(
+        result?.error?.message || "Failed to upload file to Cloudinary",
+      );
+    }
+
+    return String(result.secure_url);
+  };
+
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    try {
+      let imageUrl: string | undefined;
+      if (jobImageFile) {
+        setIsUploadingImage(true);
+        imageUrl = await uploadToCloudinary(jobImageFile);
+      }
+
+      // We assume backend attaches leaderId from session
+      createJob(
+        {
+          ...data,
+          imageUrl,
+        } as any,
+        {
+          onSuccess: () => setLocation("/dashboard"),
+        },
+      );
+    } catch (error) {
+      toast({
+        title: "Image upload failed",
+        description:
+          error instanceof Error ? error.message : "Unable to upload image",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   return (
@@ -184,15 +256,37 @@ export default function CreateJobPage() {
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="imageUrl"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Job Image (optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) =>
+                            setJobImageFile(e.target.files?.[0] ?? null)
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Upload a cover image to represent this job.
+                      </FormDescription>
+                    </FormItem>
+                  )}
+                />
+
                 <Button
                   type="submit"
                   className="w-full btn-primary"
-                  disabled={isPending}
+                  disabled={isPending || isUploadingImage}
                 >
-                  {isPending ? (
+                  {isPending || isUploadingImage ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   ) : null}
-                  Publish Job
+                  {isUploadingImage ? "Uploading image..." : "Publish Job"}
                 </Button>
               </form>
             </Form>

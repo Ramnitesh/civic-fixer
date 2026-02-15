@@ -51,6 +51,58 @@ function canEditJob(job: Awaited<ReturnType<typeof storage.getJob>>): boolean {
   return true;
 }
 
+function normalizeMetadata(metadata: unknown): Record<string, unknown> {
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    return metadata as Record<string, unknown>;
+  }
+  return {};
+}
+
+async function getPersistedDisputeDetails(jobId: number, disputeId: number) {
+  const proof = await storage.getJobProof(jobId);
+  if (!proof) return undefined;
+
+  const metadata = normalizeMetadata(proof.metadata);
+  const disputeDetailsMap =
+    metadata.disputeDetails &&
+    typeof metadata.disputeDetails === "object" &&
+    !Array.isArray(metadata.disputeDetails)
+      ? (metadata.disputeDetails as Record<string, unknown>)
+      : {};
+
+  const details = disputeDetailsMap[String(disputeId)];
+  if (details && typeof details === "object" && !Array.isArray(details)) {
+    return details as Record<string, unknown>;
+  }
+
+  return undefined;
+}
+
+async function persistDisputeDetails(
+  jobId: number,
+  disputeId: number,
+  details: Record<string, unknown>,
+) {
+  const proof = await storage.getJobProof(jobId);
+  if (!proof) return;
+
+  const metadata = normalizeMetadata(proof.metadata);
+  const existingDisputeDetails =
+    metadata.disputeDetails &&
+    typeof metadata.disputeDetails === "object" &&
+    !Array.isArray(metadata.disputeDetails)
+      ? (metadata.disputeDetails as Record<string, unknown>)
+      : {};
+
+  await storage.updateJobProofMetadata(jobId, {
+    ...metadata,
+    disputeDetails: {
+      ...existingDisputeDetails,
+      [String(disputeId)]: details,
+    },
+  });
+}
+
 async function finalizeReviewIfEligible(jobId: number) {
   const job = await storage.getJob(jobId);
   if (!job || job.status !== "UNDER_REVIEW" || !job.reviewDeadline) return;
@@ -142,7 +194,14 @@ export async function registerRoutes(
       filtered = filtered.filter(
         (j) => j.leaderId === Number(req.query.leaderId),
       );
-    res.json(filtered);
+
+    const enriched = await Promise.all(
+      filtered.map(async (job) => ({
+        ...job,
+        imageUrl: (await storage.getJobImage(job.id)) ?? null,
+      })),
+    );
+    res.json(enriched);
   });
 
   app.post(api.jobs.create.path, async (req, res) => {
@@ -160,8 +219,15 @@ export async function registerRoutes(
         .json({ message: "Target amount must be ≤ ₹10,000" });
     }
 
-    const job = await storage.createJob({ ...input, leaderId: req.user!.id });
-    res.status(201).json(job);
+    const { imageUrl, ...jobInput } = input;
+    const job = await storage.createJob({
+      ...jobInput,
+      leaderId: req.user!.id,
+    });
+    if (imageUrl) {
+      await storage.setJobImage(job.id, imageUrl);
+    }
+    res.status(201).json({ ...job, imageUrl: imageUrl ?? null });
   });
 
   app.get(api.jobs.get.path, async (req, res) => {
@@ -179,6 +245,15 @@ export async function registerRoutes(
     const proof = await storage.getJobProof(job.id);
     const proofDraft = await storage.getJobProofDraft(job.id);
     const disputes = await storage.getDisputesByJob(job.id);
+    const disputesWithDetails = await Promise.all(
+      disputes.map(async (dispute) => ({
+        ...dispute,
+        details:
+          (await storage.getDisputeDetails(dispute.id)) ??
+          (await getPersistedDisputeDetails(job.id, dispute.id)) ??
+          null,
+      })),
+    );
     const contributorCount = await storage.getContributorCount(job.id);
     const contributorIds = Array.from(
       new Set(contributions.map((contribution) => contribution.userId)),
@@ -191,12 +266,13 @@ export async function registerRoutes(
 
     res.json({
       ...job,
+      imageUrl: (await storage.getJobImage(job.id)) ?? null,
       leader,
       contributions,
       selectedWorker,
       proof,
       proofDraft: proofDraft ?? null,
-      disputes,
+      disputes: disputesWithDetails,
       contributorCount,
       contributorProfiles,
     });
@@ -589,16 +665,29 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Review window has ended" });
     }
 
-    if (req.user!.id !== job.leaderId && req.user!.role !== "ADMIN") {
-      const contribution = await storage.getContributionByJobAndUser(
-        job.id,
-        req.user!.id,
-      );
-      if (!contribution) {
-        return res
-          .status(403)
-          .json({ message: "Only contributors or leader can raise dispute" });
-      }
+    if (req.user!.role !== "CONTRIBUTOR") {
+      return res
+        .status(403)
+        .json({ message: "Only contributors can raise disputes" });
+    }
+
+    const contribution = await storage.getContributionByJobAndUser(
+      job.id,
+      req.user!.id,
+    );
+    if (!contribution) {
+      return res
+        .status(403)
+        .json({ message: "Only funded contributors can raise disputes" });
+    }
+
+    const existingDisputes = await storage.getDisputesByJob(job.id);
+    if (
+      existingDisputes.some((dispute) => dispute.raisedById === req.user!.id)
+    ) {
+      return res.status(409).json({
+        message: "You can raise dispute only once for this job",
+      });
     }
 
     const dispute = await storage.createDispute({
@@ -607,14 +696,175 @@ export async function registerRoutes(
       raisedById: req.user!.id,
     });
 
+    await storage.setDisputeDetails(dispute.id, {
+      raisedEvidencePhotoUrl: input.evidencePhotoUrl,
+    });
+    await persistDisputeDetails(job.id, dispute.id, {
+      raisedEvidencePhotoUrl: input.evidencePhotoUrl,
+    });
+
     await storage.updateJob(input.jobId, { status: "DISPUTED" });
+    console.info(
+      `[notification] Dispute raised for job #${job.id}: notify worker #${job.selectedWorkerId} and leader #${job.leaderId}`,
+    );
     res.status(201).json(dispute);
+  });
+
+  app.post(api.disputes.workerResponse.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    const disputeId = Number(req.params.id);
+    const input = api.disputes.workerResponse.input.parse(req.body);
+    const dispute = await storage.getDisputeById(disputeId);
+    if (!dispute) return res.status(404).json({ message: "Dispute not found" });
+
+    const job = await storage.getJob(dispute.jobId);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+    if (job.selectedWorkerId !== req.user!.id) {
+      return res
+        .status(403)
+        .json({ message: "Only selected worker can submit response" });
+    }
+    if (dispute.status !== "OPEN") {
+      return res.status(400).json({ message: "Dispute is not open" });
+    }
+
+    const existing = (await storage.getDisputeDetails(dispute.id)) ?? {};
+    const nextDetails = {
+      ...existing,
+      workerResponse: {
+        message: input.message,
+        photoUrl: input.photoUrl,
+        submittedAt: new Date().toISOString(),
+      },
+    };
+    await storage.setDisputeDetails(dispute.id, nextDetails);
+    await persistDisputeDetails(job.id, dispute.id, nextDetails);
+
+    return res.json(dispute);
+  });
+
+  app.post(api.disputes.leaderClarification.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    const disputeId = Number(req.params.id);
+    const input = api.disputes.leaderClarification.input.parse(req.body);
+    const dispute = await storage.getDisputeById(disputeId);
+    if (!dispute) return res.status(404).json({ message: "Dispute not found" });
+
+    const job = await storage.getJob(dispute.jobId);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+    if (job.leaderId !== req.user!.id) {
+      return res
+        .status(403)
+        .json({ message: "Only leader can submit clarification" });
+    }
+    if (dispute.status !== "OPEN") {
+      return res.status(400).json({ message: "Dispute is not open" });
+    }
+
+    const existing = (await storage.getDisputeDetails(dispute.id)) ?? {};
+    const nextDetails = {
+      ...existing,
+      leaderClarification: {
+        message: input.message,
+        submittedAt: new Date().toISOString(),
+      },
+    };
+    await storage.setDisputeDetails(dispute.id, nextDetails);
+    await persistDisputeDetails(job.id, dispute.id, nextDetails);
+
+    return res.json(dispute);
+  });
+
+  app.post(api.disputes.adminDecision.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user!.role !== "ADMIN") {
+      return res
+        .status(403)
+        .json({ message: "Only admin can take dispute decision" });
+    }
+
+    const disputeId = Number(req.params.id);
+    const input = api.disputes.adminDecision.input.parse(req.body);
+    const dispute = await storage.getDisputeById(disputeId);
+    if (!dispute) return res.status(404).json({ message: "Dispute not found" });
+    if (dispute.status !== "OPEN") {
+      return res.status(400).json({ message: "Dispute is already decided" });
+    }
+
+    const job = await storage.getJob(dispute.jobId);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+
+    if (input.action === "APPROVE_WORK") {
+      const acceptedApp = await storage.getAcceptedApplicationByJob(job.id);
+      if (acceptedApp) {
+        const worker = await storage.getUser(acceptedApp.workerId);
+        if (worker) {
+          const payout = Math.max(acceptedApp.bidAmount - 500, 0);
+          await storage.updateUser(worker.id, {
+            totalEarnings: (worker.totalEarnings || 0) + payout,
+          });
+        }
+      }
+
+      await storage.updateJob(job.id, { status: "COMPLETED" });
+      const updatedDispute = await storage.updateDisputeStatus(
+        dispute.id,
+        "RESOLVED",
+      );
+      const existingDetails =
+        (await storage.getDisputeDetails(dispute.id)) ?? {};
+      const nextDetails = {
+        ...existingDetails,
+        adminDecision: {
+          action: input.action,
+          decidedById: req.user!.id,
+          decidedAt: new Date().toISOString(),
+        },
+      };
+      await storage.setDisputeDetails(dispute.id, nextDetails);
+      await persistDisputeDetails(job.id, dispute.id, nextDetails);
+
+      return res.json(updatedDispute);
+    }
+
+    await storage.markContributionsRefunded(job.id);
+    await storage.updateJob(job.id, { status: "CANCELLED" });
+    const updatedDispute = await storage.updateDisputeStatus(
+      dispute.id,
+      "REJECTED",
+    );
+    const existingDetails = (await storage.getDisputeDetails(dispute.id)) ?? {};
+    const nextDetails = {
+      ...existingDetails,
+      adminDecision: {
+        action: input.action,
+        decidedById: req.user!.id,
+        decidedAt: new Date().toISOString(),
+      },
+    };
+    await storage.setDisputeDetails(dispute.id, nextDetails);
+    await persistDisputeDetails(job.id, dispute.id, nextDetails);
+
+    return res.json(updatedDispute);
   });
 
   app.get(api.disputes.list.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     if (req.user!.role === "ADMIN") {
-      return res.json(await storage.getDisputes());
+      const allDisputes = await storage.getDisputes();
+      return res.json(
+        await Promise.all(
+          allDisputes.map(async (dispute) => ({
+            ...dispute,
+            details:
+              (await storage.getDisputeDetails(dispute.id)) ??
+              (await getPersistedDisputeDetails(dispute.jobId, dispute.id)) ??
+              null,
+          })),
+        ),
+      );
     }
 
     const jobs = await storage.getJobs();
@@ -622,7 +872,18 @@ export async function registerRoutes(
       .filter((j) => j.leaderId === req.user!.id)
       .map((j) => j.id);
     const all = await storage.getDisputes();
-    return res.json(all.filter((d) => mine.includes(d.jobId)));
+    const mineDisputes = all.filter((d) => mine.includes(d.jobId));
+    return res.json(
+      await Promise.all(
+        mineDisputes.map(async (dispute) => ({
+          ...dispute,
+          details:
+            (await storage.getDisputeDetails(dispute.id)) ??
+            (await getPersistedDisputeDetails(dispute.jobId, dispute.id)) ??
+            null,
+        })),
+      ),
+    );
   });
 
   return httpServer;

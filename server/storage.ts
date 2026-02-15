@@ -34,6 +34,24 @@ export type JobProofDraft = {
   updatedAt: string;
 };
 
+export type DisputeDetails = {
+  raisedEvidencePhotoUrl?: string;
+  workerResponse?: {
+    message: string;
+    photoUrl?: string;
+    submittedAt: string;
+  };
+  leaderClarification?: {
+    message: string;
+    submittedAt: string;
+  };
+  adminDecision?: {
+    action: "APPROVE_WORK" | "REJECT_WORK";
+    decidedById: number;
+    decidedAt: string;
+  };
+};
+
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
@@ -53,6 +71,8 @@ export interface IStorage {
       selectedWorkerId?: number;
     },
   ): Promise<Job>;
+  setJobImage(jobId: number, imageUrl: string): Promise<void>;
+  getJobImage(jobId: number): Promise<string | undefined>;
 
   // Contributions
   createContribution(contribution: InsertContribution): Promise<Contribution>;
@@ -101,13 +121,20 @@ export interface IStorage {
 
   // Disputes
   createDispute(dispute: InsertDispute): Promise<Dispute>;
+  getDisputeById(id: number): Promise<Dispute | undefined>;
   getDisputes(): Promise<Dispute[]>;
   getDisputesByJob(jobId: number): Promise<Dispute[]>;
+  updateDisputeStatus(id: number, status: Dispute["status"]): Promise<Dispute>;
+  setDisputeDetails(disputeId: number, details: DisputeDetails): Promise<void>;
+  getDisputeDetails(disputeId: number): Promise<DisputeDetails | undefined>;
+  markContributionsRefunded(jobId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
   sessionStore: session.Store;
+  private jobImageUrls = new Map<number, string>();
   private proofDrafts = new Map<number, JobProofDraft>();
+  private disputeDetails = new Map<number, DisputeDetails>();
 
   constructor() {
     this.sessionStore = new MemoryStore({
@@ -179,6 +206,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(jobs.id, id))
       .returning();
     return job;
+  }
+
+  async setJobImage(jobId: number, imageUrl: string): Promise<void> {
+    this.jobImageUrls.set(jobId, imageUrl);
+  }
+
+  async getJobImage(jobId: number): Promise<string | undefined> {
+    return this.jobImageUrls.get(jobId);
   }
 
   // Contributions
@@ -390,6 +425,14 @@ export class DatabaseStorage implements IStorage {
     return dispute;
   }
 
+  async getDisputeById(id: number): Promise<Dispute | undefined> {
+    const [dispute] = await db
+      .select()
+      .from(disputes)
+      .where(eq(disputes.id, id));
+    return dispute;
+  }
+
   async getDisputes(): Promise<Dispute[]> {
     return await db.select().from(disputes).orderBy(desc(disputes.createdAt));
   }
@@ -400,6 +443,39 @@ export class DatabaseStorage implements IStorage {
       .from(disputes)
       .where(eq(disputes.jobId, jobId))
       .orderBy(desc(disputes.createdAt));
+  }
+
+  async updateDisputeStatus(
+    id: number,
+    status: Dispute["status"],
+  ): Promise<Dispute> {
+    const [updated] = await db
+      .update(disputes)
+      .set({ status })
+      .where(eq(disputes.id, id))
+      .returning();
+
+    return updated;
+  }
+
+  async setDisputeDetails(
+    disputeId: number,
+    details: DisputeDetails,
+  ): Promise<void> {
+    this.disputeDetails.set(disputeId, details);
+  }
+
+  async getDisputeDetails(
+    disputeId: number,
+  ): Promise<DisputeDetails | undefined> {
+    return this.disputeDetails.get(disputeId);
+  }
+
+  async markContributionsRefunded(jobId: number): Promise<void> {
+    await db
+      .update(contributions)
+      .set({ paymentStatus: "FAILED" })
+      .where(eq(contributions.jobId, jobId));
   }
 }
 

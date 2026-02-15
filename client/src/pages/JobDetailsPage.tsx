@@ -17,6 +17,7 @@ import {
   Share2,
   Clock3,
   FileText,
+  ArrowLeft,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,13 @@ export default function JobDetailsPage() {
   const [isUploadingDisposal, setIsUploadingDisposal] = useState(false);
   const [workerSubmissionMessage, setWorkerSubmissionMessage] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
+  const [disputeEvidenceFile, setDisputeEvidenceFile] = useState<File | null>(
+    null,
+  );
+  const [workerDisputeMessage, setWorkerDisputeMessage] = useState("");
+  const [workerDisputeFile, setWorkerDisputeFile] = useState<File | null>(null);
+  const [leaderClarificationMessage, setLeaderClarificationMessage] =
+    useState("");
 
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -133,7 +141,11 @@ export default function JobDetailsPage() {
   });
 
   const disputeMutation = useMutation({
-    mutationFn: async (payload: { jobId: number; reason: string }) => {
+    mutationFn: async (payload: {
+      jobId: number;
+      reason: string;
+      evidencePhotoUrl?: string;
+    }) => {
       const res = await fetch(api.disputes.create.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,6 +170,136 @@ export default function JobDetailsPage() {
     onError: (err: Error) => {
       toast({
         title: "Dispute failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const workerDisputeResponseMutation = useMutation({
+    mutationFn: async (payload: {
+      disputeId: number;
+      message: string;
+      photoUrl?: string;
+    }) => {
+      const res = await fetch(
+        api.disputes.workerResponse.path.replace(
+          ":id",
+          String(payload.disputeId),
+        ),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: payload.message,
+            photoUrl: payload.photoUrl,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const message =
+          (await res.json().catch(() => null))?.message ??
+          "Failed to submit worker response";
+        throw new Error(message);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.jobs.get.path, id] });
+      setWorkerDisputeMessage("");
+      setWorkerDisputeFile(null);
+      toast({
+        title: "Response submitted",
+        description: "Your dispute response has been shared.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Submission failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const leaderClarificationMutation = useMutation({
+    mutationFn: async (payload: { disputeId: number; message: string }) => {
+      const res = await fetch(
+        api.disputes.leaderClarification.path.replace(
+          ":id",
+          String(payload.disputeId),
+        ),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: payload.message }),
+        },
+      );
+      if (!res.ok) {
+        const message =
+          (await res.json().catch(() => null))?.message ??
+          "Failed to submit clarification";
+        throw new Error(message);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.jobs.get.path, id] });
+      setLeaderClarificationMessage("");
+      toast({
+        title: "Clarification submitted",
+        description: "Your clarification has been shared.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Submission failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const adminDecisionMutation = useMutation({
+    mutationFn: async (payload: {
+      disputeId: number;
+      action: "APPROVE_WORK" | "REJECT_WORK";
+    }) => {
+      const res = await fetch(
+        api.disputes.adminDecision.path.replace(
+          ":id",
+          String(payload.disputeId),
+        ),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: payload.action }),
+        },
+      );
+      if (!res.ok) {
+        const message =
+          (await res.json().catch(() => null))?.message ??
+          "Failed to submit admin decision";
+        throw new Error(message);
+      }
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.jobs.get.path, id] });
+      toast({
+        title:
+          variables.action === "APPROVE_WORK"
+            ? "Work approved"
+            : "Work rejected",
+        description:
+          variables.action === "APPROVE_WORK"
+            ? "Payment released to worker."
+            : "Contributors marked for refund.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Decision failed",
         description: err.message,
         variant: "destructive",
       });
@@ -278,6 +420,7 @@ export default function JobDetailsPage() {
     },
   ];
   const hasAnyProofMedia = proofMedia.some((item) => Boolean(item.url));
+  const jobImageUrl = (job as any)?.imageUrl as string | null | undefined;
   const beforeStepDone = Boolean(proofMedia[0]?.url);
   const afterStepDone = Boolean(proofMedia[1]?.url);
   const disposalStepDone = Boolean(proofMedia[2]?.url);
@@ -456,6 +599,21 @@ export default function JobDetailsPage() {
       ? formatDistanceStrict(0, reviewRemainingMs)
       : "Review window ended";
 
+  const disputes = Array.isArray((job as any)?.disputes)
+    ? ((job as any).disputes as any[])
+    : [];
+  const openDispute = disputes.find((item) => item?.status === "OPEN");
+  const hasWorkerResponded = Boolean(
+    openDispute?.details?.workerResponse?.message,
+  );
+  const myRaisedDispute = disputes.find(
+    (item) => item?.raisedById === user?.id,
+  );
+  const hasContributed =
+    Boolean(user?.id) &&
+    Array.isArray((job as any)?.contributions) &&
+    (job as any).contributions.some((c: any) => c.userId === user?.id);
+
   if (isLoading || !job) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -468,6 +626,10 @@ export default function JobDetailsPage() {
   const isAdmin = user?.role === "ADMIN";
   const isWorker = user?.role === "WORKER";
   const isContributor = user?.role === "CONTRIBUTOR";
+  const isSelectedWorker = Boolean(
+    user?.id && user.id === job.selectedWorkerId,
+  );
+  const canViewDisputeDetails = Boolean(user);
   const canManageWorkerSelection = isCreator || isAdmin;
   const canViewApplications = isCreator || isAdmin || isContributor;
   const canContribute =
@@ -498,10 +660,42 @@ export default function JobDetailsPage() {
               ? 100
               : 0;
 
+  const getActorName = (id: number) => {
+    if (id === job.leaderId) {
+      return (job as any)?.leader?.name || `Leader #${id}`;
+    }
+    if (id === job.selectedWorkerId) {
+      return (job as any)?.selectedWorker?.name || `Worker #${id}`;
+    }
+    const contributorProfile = Array.isArray((job as any)?.contributorProfiles)
+      ? (job as any).contributorProfiles.find(
+          (profile: any) => profile.id === id,
+        )
+      : null;
+    return contributorProfile?.name || `User #${id}`;
+  };
+
   return (
     <div className="min-h-screen bg-background pb-16">
       <Navigation />
       <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (typeof window !== "undefined" && window.history.length > 1) {
+              window.history.back();
+              return;
+            }
+            if (typeof window !== "undefined") {
+              window.location.href = "/jobs";
+            }
+          }}
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back
+        </Button>
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold">{job.title}</h1>
@@ -535,6 +729,16 @@ export default function JobDetailsPage() {
                   Private residential property:{" "}
                   <b>{job.isPrivateResidentialProperty ? "Yes" : "No"}</b>
                 </p>
+
+                {jobImageUrl && (
+                  <a href={jobImageUrl} target="_blank" rel="noreferrer">
+                    <img
+                      src={jobImageUrl}
+                      alt={`${job.title} cover`}
+                      className="w-full max-h-72 object-cover rounded border"
+                    />
+                  </a>
+                )}
 
                 {canEditJob && (
                   <div className="border rounded-lg p-4 space-y-3">
@@ -662,6 +866,14 @@ export default function JobDetailsPage() {
                               controls
                               src={media.url}
                             />
+                            <a
+                              href={media.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs underline"
+                            >
+                              Open {media.label} file
+                            </a>
                           </div>
                         );
                       }
@@ -692,11 +904,21 @@ export default function JobDetailsPage() {
                           className="rounded border p-2 space-y-2"
                         >
                           <p className="text-xs font-medium">{media.label}</p>
-                          <img
-                            className="rounded border aspect-square object-cover"
-                            src={media.url}
-                            alt={media.label.toLowerCase()}
-                          />
+                          <a href={media.url} target="_blank" rel="noreferrer">
+                            <img
+                              className="rounded border aspect-square object-cover"
+                              src={media.url}
+                              alt={media.label.toLowerCase()}
+                            />
+                          </a>
+                          <a
+                            href={media.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs underline"
+                          >
+                            Open {media.label} file
+                          </a>
                         </div>
                       );
                     })}
@@ -726,6 +948,92 @@ export default function JobDetailsPage() {
                     <p className="text-sm whitespace-pre-wrap text-muted-foreground">
                       {workerSubmittedNote}
                     </p>
+                  </div>
+                )}
+
+                {canViewDisputeDetails && disputes.length > 0 && (
+                  <div className="rounded border p-3 space-y-3">
+                    <p className="text-sm font-semibold">Dispute Details</p>
+                    {disputes.map((dispute: any) => {
+                      const details = (dispute?.details || {}) as any;
+                      return (
+                        <div
+                          key={dispute.id}
+                          className="border rounded p-3 space-y-2"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">
+                              Raised by {getActorName(dispute.raisedById)}
+                            </p>
+                            <Badge variant="outline">{dispute.status}</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {dispute.createdAt
+                              ? new Date(dispute.createdAt).toLocaleString()
+                              : ""}
+                          </p>
+                          <p className="text-sm whitespace-pre-wrap">
+                            {dispute.reason}
+                          </p>
+
+                          {details.raisedEvidencePhotoUrl && (
+                            <a
+                              href={details.raisedEvidencePhotoUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs underline"
+                            >
+                              View dispute evidence
+                            </a>
+                          )}
+
+                          {details.workerResponse?.message && (
+                            <div className="rounded border p-2 bg-muted/20 space-y-1">
+                              <p className="text-xs font-medium">
+                                Worker response
+                              </p>
+                              <p className="text-xs whitespace-pre-wrap">
+                                {details.workerResponse.message}
+                              </p>
+                              {details.workerResponse.photoUrl && (
+                                <a
+                                  href={details.workerResponse.photoUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs underline"
+                                >
+                                  View worker additional proof
+                                </a>
+                              )}
+                            </div>
+                          )}
+
+                          {details.leaderClarification?.message && (
+                            <div className="rounded border p-2 bg-muted/20 space-y-1">
+                              <p className="text-xs font-medium">
+                                Leader clarification
+                              </p>
+                              <p className="text-xs whitespace-pre-wrap">
+                                {details.leaderClarification.message}
+                              </p>
+                            </div>
+                          )}
+
+                          {details.adminDecision?.action && (
+                            <div className="rounded border p-2 bg-muted/20 space-y-1">
+                              <p className="text-xs font-medium">
+                                Admin decision
+                              </p>
+                              <p className="text-xs">
+                                {details.adminDecision.action === "APPROVE_WORK"
+                                  ? "APPROVE_WORK (Payment released to worker)"
+                                  : "REJECT_WORK (Refund contributors)"}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -1117,29 +1425,189 @@ export default function JobDetailsPage() {
               </Card>
             )}
 
-            {job.status === "UNDER_REVIEW" && !!user && !isWorker && (
+            {job.status === "UNDER_REVIEW" &&
+              !!user &&
+              user.role === "CONTRIBUTOR" &&
+              hasContributed &&
+              !myRaisedDispute && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Raise Dispute</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <Textarea
+                      value={disputeReason}
+                      onChange={(e) => setDisputeReason(e.target.value)}
+                      placeholder="Provide reason"
+                    />
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) =>
+                        setDisputeEvidenceFile(e.target.files?.[0] ?? null)
+                      }
+                    />
+                    <Button
+                      variant="destructive"
+                      disabled={!disputeReason || disputeMutation.isPending}
+                      onClick={async () => {
+                        let evidencePhotoUrl: string | undefined;
+                        if (disputeEvidenceFile) {
+                          const asset =
+                            await uploadToCloudinary(disputeEvidenceFile);
+                          evidencePhotoUrl = asset.url;
+                        }
+
+                        disputeMutation.mutate({
+                          jobId: id,
+                          reason: disputeReason,
+                          evidencePhotoUrl,
+                        });
+                      }}
+                    >
+                      Submit Dispute
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+            {isWorker && openDispute && user?.id === job.selectedWorkerId && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Raise Dispute</CardTitle>
+                  <CardTitle>Dispute Response (Worker)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {hasWorkerResponded && (
+                    <div className="rounded border p-2 bg-muted/20 space-y-1">
+                      <p className="text-xs font-medium">
+                        Your submitted response
+                      </p>
+                      <p className="text-xs whitespace-pre-wrap">
+                        {openDispute?.details?.workerResponse?.message}
+                      </p>
+                      {openDispute?.details?.workerResponse?.photoUrl && (
+                        <a
+                          href={openDispute.details.workerResponse.photoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs underline"
+                        >
+                          View your uploaded proof
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {hasWorkerResponded && (
+                    <p className="text-xs text-muted-foreground">
+                      You have already submitted a response for this dispute.
+                    </p>
+                  )}
+                  <Textarea
+                    value={workerDisputeMessage}
+                    onChange={(e) => setWorkerDisputeMessage(e.target.value)}
+                    placeholder="Submit your written response"
+                    disabled={hasWorkerResponded}
+                  />
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setWorkerDisputeFile(e.target.files?.[0] ?? null)
+                    }
+                    disabled={hasWorkerResponded}
+                  />
+                  <Button
+                    disabled={
+                      hasWorkerResponded ||
+                      !workerDisputeMessage ||
+                      workerDisputeResponseMutation.isPending
+                    }
+                    onClick={async () => {
+                      let photoUrl: string | undefined;
+                      if (workerDisputeFile) {
+                        const asset =
+                          await uploadToCloudinary(workerDisputeFile);
+                        photoUrl = asset.url;
+                      }
+
+                      workerDisputeResponseMutation.mutate({
+                        disputeId: openDispute.id,
+                        message: workerDisputeMessage,
+                        photoUrl,
+                      });
+                    }}
+                  >
+                    Submit Worker Response
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {isCreator && openDispute && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Leader Clarification</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <Textarea
-                    value={disputeReason}
-                    onChange={(e) => setDisputeReason(e.target.value)}
-                    placeholder="Provide reason"
+                    value={leaderClarificationMessage}
+                    onChange={(e) =>
+                      setLeaderClarificationMessage(e.target.value)
+                    }
+                    placeholder="Submit your clarification statement"
                   />
                   <Button
-                    variant="destructive"
-                    disabled={!disputeReason || disputeMutation.isPending}
+                    disabled={
+                      !leaderClarificationMessage ||
+                      leaderClarificationMutation.isPending
+                    }
                     onClick={() =>
-                      disputeMutation.mutate({
-                        jobId: id,
-                        reason: disputeReason,
+                      leaderClarificationMutation.mutate({
+                        disputeId: openDispute.id,
+                        message: leaderClarificationMessage,
                       })
                     }
                   >
-                    Submit Dispute
+                    Submit Clarification
                   </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {isAdmin && openDispute && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Admin Dispute Decision</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Choose final action for this dispute.
+                  </p>
+                  <div className="grid grid-cols-1 gap-2">
+                    <Button
+                      disabled={adminDecisionMutation.isPending}
+                      onClick={() =>
+                        adminDecisionMutation.mutate({
+                          disputeId: openDispute.id,
+                          action: "APPROVE_WORK",
+                        })
+                      }
+                    >
+                      APPROVE_WORK
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      disabled={adminDecisionMutation.isPending}
+                      onClick={() =>
+                        adminDecisionMutation.mutate({
+                          disputeId: openDispute.id,
+                          action: "REJECT_WORK",
+                        })
+                      }
+                    >
+                      REJECT_WORK
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             )}

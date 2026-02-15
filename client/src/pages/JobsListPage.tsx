@@ -58,8 +58,15 @@ export default function JobsListPage() {
                 <SelectItem value="FUNDING_COMPLETE">
                   Funding Complete
                 </SelectItem>
+                <SelectItem value="WORKER_SELECTED">Worker Selected</SelectItem>
                 <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                <SelectItem value="AWAITING_VERIFICATION">
+                  Awaiting Verification
+                </SelectItem>
+                <SelectItem value="UNDER_REVIEW">Under Review</SelectItem>
                 <SelectItem value="COMPLETED">Completed</SelectItem>
+                <SelectItem value="DISPUTED">Disputed</SelectItem>
+                <SelectItem value="CANCELLED">Cancelled</SelectItem>
               </SelectContent>
             </Select>
           </div>

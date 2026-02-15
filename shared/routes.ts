@@ -23,6 +23,7 @@ const createJobInput = z.object({
   location: z.string().min(1),
   targetAmount: z.number().positive().max(10000),
   isPrivateResidentialProperty: z.boolean(),
+  imageUrl: z.string().url().optional(),
 });
 
 const createContributionInput = z.object({
@@ -54,6 +55,20 @@ const upsertProofDraftInput = z.object({
 const createDisputeInput = z.object({
   jobId: z.number(),
   reason: z.string().min(1),
+  evidencePhotoUrl: z.string().url().optional(),
+});
+
+const submitDisputeWorkerResponseInput = z.object({
+  message: z.string().min(1),
+  photoUrl: z.string().url().optional(),
+});
+
+const submitDisputeLeaderClarificationInput = z.object({
+  message: z.string().min(1),
+});
+
+const submitDisputeAdminDecisionInput = z.object({
+  action: z.enum(["APPROVE_WORK", "REJECT_WORK"]),
 });
 
 export const api = {
@@ -235,6 +250,24 @@ export const api = {
       path: "/api/disputes" as const,
       input: createDisputeInput,
       responses: { 201: z.custom<typeof disputes.$inferSelect>() },
+    },
+    workerResponse: {
+      method: "POST" as const,
+      path: "/api/disputes/:id/worker-response" as const,
+      input: submitDisputeWorkerResponseInput,
+      responses: { 200: z.custom<typeof disputes.$inferSelect>() },
+    },
+    leaderClarification: {
+      method: "POST" as const,
+      path: "/api/disputes/:id/leader-clarification" as const,
+      input: submitDisputeLeaderClarificationInput,
+      responses: { 200: z.custom<typeof disputes.$inferSelect>() },
+    },
+    adminDecision: {
+      method: "POST" as const,
+      path: "/api/disputes/:id/admin-decision" as const,
+      input: submitDisputeAdminDecisionInput,
+      responses: { 200: z.custom<typeof disputes.$inferSelect>() },
     },
     list: {
       method: "GET" as const,

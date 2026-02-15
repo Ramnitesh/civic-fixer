@@ -77,7 +77,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${user.totalEarnings || 0}
+                ₹{user.totalEarnings || 0}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Available for withdrawal
