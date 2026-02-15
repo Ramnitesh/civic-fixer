@@ -113,6 +113,7 @@ export const api = {
           typeof jobs.$inferSelect & {
             leader?: typeof users.$inferSelect;
             contributions?: (typeof contributions.$inferSelect)[];
+            contributorProfiles?: (typeof users.$inferSelect)[];
             selectedWorker?: typeof users.$inferSelect | null;
             proof?: typeof jobProofs.$inferSelect | null;
             disputes?: (typeof disputes.$inferSelect)[];

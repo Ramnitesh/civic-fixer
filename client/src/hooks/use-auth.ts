@@ -6,7 +6,11 @@ export function useAuth() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: user, isLoading, error } = useQuery({
+  const {
+    data: user,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: [api.auth.me.path],
     queryFn: async () => {
       const res = await fetch(api.auth.me.path);
@@ -32,10 +36,17 @@ export function useAuth() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData([api.auth.me.path], data);
-      toast({ title: "Welcome back!", description: `Logged in as ${data.username}` });
+      toast({
+        title: "Welcome back!",
+        description: `Logged in as ${data.username}`,
+      });
     },
     onError: (error: Error) => {
-      toast({ title: "Login Failed", description: error.message, variant: "destructive" });
+      toast({
+        title: "Login Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -57,7 +68,11 @@ export function useAuth() {
       toast({ title: "Welcome!", description: "Account created successfully" });
     },
     onError: (error: Error) => {
-      toast({ title: "Registration Failed", description: error.message, variant: "destructive" });
+      toast({
+        title: "Registration Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -71,6 +86,40 @@ export function useAuth() {
     },
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: {
+      name?: string;
+      phone?: string;
+      availability?: string;
+      skillTags?: string[];
+    }) => {
+      const res = await fetch(api.auth.updateProfile.path, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => null);
+        throw new Error(error?.message || "Profile update failed");
+      }
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData([api.auth.me.path], data);
+      toast({
+        title: "Profile updated",
+        description: "Your details were saved successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   return {
     user,
     isLoading,
@@ -80,5 +129,7 @@ export function useAuth() {
     register: registerMutation.mutate,
     isRegistering: registerMutation.isPending,
     logout: logoutMutation.mutate,
+    updateProfile: updateProfileMutation.mutate,
+    isUpdatingProfile: updateProfileMutation.isPending,
   };
 }

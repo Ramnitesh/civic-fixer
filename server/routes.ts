@@ -104,11 +104,6 @@ export async function registerRoutes(
 
   app.patch(api.auth.updateProfile.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    if (req.user!.role !== "WORKER") {
-      return res.status(403).json({
-        message: "Only workers can update availability and skill tags",
-      });
-    }
 
     const input = api.auth.updateProfile.input.parse(req.body);
     const updated = await storage.updateUser(req.user!.id, input);
@@ -165,6 +160,14 @@ export async function registerRoutes(
     const proof = await storage.getJobProof(job.id);
     const disputes = await storage.getDisputesByJob(job.id);
     const contributorCount = await storage.getContributorCount(job.id);
+    const contributorIds = Array.from(
+      new Set(contributions.map((contribution) => contribution.userId)),
+    );
+    const contributorProfiles = (
+      await Promise.all(
+        contributorIds.map((contributorId) => storage.getUser(contributorId)),
+      )
+    ).filter(Boolean);
 
     res.json({
       ...job,
@@ -174,6 +177,7 @@ export async function registerRoutes(
       proof,
       disputes,
       contributorCount,
+      contributorProfiles,
     });
   });
 
@@ -185,10 +189,41 @@ export async function registerRoutes(
     const job = await storage.getJob(id);
     if (!job) return res.status(404).json({ message: "Job not found" });
 
+    const requesterId = Number(req.user!.id);
     const isAdmin = req.user!.role === "ADMIN";
-    const isLeader = job.leaderId === req.user!.id;
+    const isLeader = job.leaderId === requesterId;
+    const isWorkflowStatusUpdate =
+      typeof updates.status === "string" &&
+      ["IN_PROGRESS", "AWAITING_VERIFICATION"].includes(updates.status);
+
+    if (isWorkflowStatusUpdate) {
+      if (
+        updates.status === "IN_PROGRESS" &&
+        job.status !== "WORKER_SELECTED"
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Can start work only after worker selection" });
+      }
+      if (
+        updates.status === "AWAITING_VERIFICATION" &&
+        job.status !== "IN_PROGRESS"
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Can complete work only after it is in progress" });
+      }
+
+      const updated = await storage.updateJob(id, {
+        status: updates.status as "IN_PROGRESS" | "AWAITING_VERIFICATION",
+      });
+      return res.json(updated);
+    }
+
     if (!isAdmin && !isLeader)
-      return res.status(403).json({ message: "Forbidden" });
+      return res.status(403).json({
+        message: "Forbidden: only leader/admin can update this job",
+      });
 
     if (
       (updates.title ||

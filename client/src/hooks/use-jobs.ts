@@ -118,5 +118,12 @@ export function useUpdateJob() {
         description: "Changes saved successfully",
       });
     },
+    onError: (err: Error) => {
+      toast({
+        title: "Update failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
   });
 }

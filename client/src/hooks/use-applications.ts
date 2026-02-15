@@ -44,7 +44,7 @@ export function useApplyForJob() {
       });
       toast({
         title: "Application Sent",
-        description: "Good luck! The leader will review your application.",
+        description: `Bid applied successfully: ₹${variables.bidAmount}. The leader will review your application.`,
       });
     },
     onError: (err) => {

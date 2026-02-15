@@ -211,7 +211,8 @@ export default function JobDetailsPage() {
     isCreator &&
     !job.selectedWorkerId &&
     !["COMPLETED", "DISPUTED"].includes(job.status);
-  const hasApplied = applications.some((a: any) => a.workerId === user?.id);
+  const myApplication = applications.find((a: any) => a.workerId === user?.id);
+  const hasApplied = Boolean(myApplication);
 
   const fundingPercent = Math.min(
     ((job.collectedAmount || 0) / job.targetAmount) * 100,
@@ -220,13 +221,15 @@ export default function JobDetailsPage() {
   const workerProgress =
     job.status === "WORKER_SELECTED"
       ? 33
-      : job.status === "AWAITING_VERIFICATION"
-        ? 66
-        : job.status === "UNDER_REVIEW"
-          ? 85
-          : job.status === "COMPLETED"
-            ? 100
-            : 0;
+      : job.status === "IN_PROGRESS"
+        ? 50
+        : job.status === "AWAITING_VERIFICATION"
+          ? 66
+          : job.status === "UNDER_REVIEW"
+            ? 85
+            : job.status === "COMPLETED"
+              ? 100
+              : 0;
 
   return (
     <div className="min-h-screen bg-background pb-16">
@@ -383,7 +386,7 @@ export default function JobDetailsPage() {
               </CardContent>
             </Card>
 
-            {(canViewApplications || job.selectedWorker) && (
+            {!isWorker && (canViewApplications || job.selectedWorker) && (
               <Card>
                 <CardHeader>
                   <CardTitle>Worker Details</CardTitle>
@@ -476,45 +479,78 @@ export default function JobDetailsPage() {
                 </CardContent>
               </Card>
             )}
+
+            {(isCreator || isContributor || isAdmin) &&
+              Array.isArray((job as any).contributorProfiles) &&
+              (job as any).contributorProfiles.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Contributor Profiles</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {(job as any).contributorProfiles.map(
+                      (contributor: any) => (
+                        <div
+                          key={contributor.id}
+                          className="border rounded p-3 bg-muted/20"
+                        >
+                          <p className="font-medium">{contributor.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Phone: {contributor.phone}
+                          </p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            Role:{" "}
+                            {String(
+                              contributor.role || "contributor",
+                            ).toLowerCase()}
+                          </p>
+                        </div>
+                      ),
+                    )}
+                  </CardContent>
+                </Card>
+              )}
           </div>
 
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Funding Progress</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm font-medium">
-                  ₹{job.collectedAmount || 0} / ₹{job.targetAmount}
-                </p>
-                <Progress value={fundingPercent} className="h-2" />
-                <p className="text-xs text-muted-foreground">
-                  Contributors:{" "}
-                  {job.contributorCount ?? job.contributions?.length ?? 0}
-                </p>
-                {canContribute && (
-                  <div className="space-y-2">
-                    <Input
-                      type="number"
-                      value={contributionAmount}
-                      onChange={(e) => setContributionAmount(e.target.value)}
-                    />
-                    <Button
-                      className="w-full"
-                      disabled={isContributing}
-                      onClick={() =>
-                        contribute({
-                          jobId: id,
-                          amount: Number(contributionAmount),
-                        })
-                      }
-                    >
-                      Razorpay: Contribute
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {!isWorker && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Funding Progress</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm font-medium">
+                    ₹{job.collectedAmount || 0} / ₹{job.targetAmount}
+                  </p>
+                  <Progress value={fundingPercent} className="h-2" />
+                  <p className="text-xs text-muted-foreground">
+                    Contributors:{" "}
+                    {job.contributorCount ?? job.contributions?.length ?? 0}
+                  </p>
+                  {canContribute && (
+                    <div className="space-y-2">
+                      <Input
+                        type="number"
+                        value={contributionAmount}
+                        onChange={(e) => setContributionAmount(e.target.value)}
+                      />
+                      <Button
+                        className="w-full"
+                        disabled={isContributing}
+                        onClick={() =>
+                          contribute({
+                            jobId: id,
+                            amount: Number(contributionAmount),
+                          })
+                        }
+                      >
+                        Razorpay: Contribute
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>
@@ -534,6 +570,13 @@ export default function JobDetailsPage() {
                   <CardTitle>Worker Actions</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {hasApplied && (
+                    <p className="text-sm text-muted-foreground">
+                      Bid applied successfully for{" "}
+                      <b>₹{myApplication?.bidAmount}</b>.
+                    </p>
+                  )}
+
                   {!hasApplied &&
                     ["FUNDING_OPEN", "FUNDING_COMPLETE"].includes(
                       job.status,
@@ -554,6 +597,54 @@ export default function JobDetailsPage() {
                           Apply for Job
                         </Button>
                       </>
+                    )}
+
+                  {user?.id === job.selectedWorkerId &&
+                    job.status === "WORKER_SELECTED" && (
+                      <Button
+                        variant="secondary"
+                        disabled={isUpdatingJob}
+                        onClick={() => {
+                          updateJob(
+                            { id, status: "IN_PROGRESS" },
+                            {
+                              onSuccess: () => {
+                                toast({
+                                  title: "Work started",
+                                  description:
+                                    "Job status updated to IN_PROGRESS.",
+                                });
+                              },
+                            },
+                          );
+                        }}
+                      >
+                        Start Work
+                      </Button>
+                    )}
+
+                  {user?.id === job.selectedWorkerId &&
+                    job.status === "IN_PROGRESS" && (
+                      <Button
+                        variant="secondary"
+                        disabled={isUpdatingJob}
+                        onClick={() => {
+                          updateJob(
+                            { id, status: "AWAITING_VERIFICATION" },
+                            {
+                              onSuccess: () => {
+                                toast({
+                                  title: "Work marked completed",
+                                  description:
+                                    "Status updated to AWAITING_VERIFICATION.",
+                                });
+                              },
+                            },
+                          );
+                        }}
+                      >
+                        Mark as Completed
+                      </Button>
                     )}
 
                   {user?.id === job.selectedWorkerId &&
@@ -645,24 +736,26 @@ export default function JobDetailsPage() {
               </Card>
             )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Share Job</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <a href={whatsappUrl} target="_blank" rel="noreferrer">
-                  <Button className="w-full" variant="outline">
-                    <Share2 className="w-4 h-4 mr-2" />
-                    Share on WhatsApp
-                  </Button>
-                </a>
-                <a href={xShareUrl} target="_blank" rel="noreferrer">
-                  <Button className="w-full" variant="outline">
-                    Share on Social
-                  </Button>
-                </a>
-              </CardContent>
-            </Card>
+            {!isWorker && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Share Job</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <a href={whatsappUrl} target="_blank" rel="noreferrer">
+                    <Button className="w-full" variant="outline">
+                      <Share2 className="w-4 h-4 mr-2" />
+                      Share on WhatsApp
+                    </Button>
+                  </a>
+                  <a href={xShareUrl} target="_blank" rel="noreferrer">
+                    <Button className="w-full" variant="outline">
+                      Share on Social
+                    </Button>
+                  </a>
+                </CardContent>
+              </Card>
+            )}
 
             {!user && (
               <Link href="/auth">
