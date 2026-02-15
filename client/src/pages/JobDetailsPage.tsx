@@ -343,9 +343,14 @@ export default function JobDetailsPage() {
     },
   });
 
-  const uploadToCloudinary = async (file: File) => {
+  const uploadToCloudinary = async (
+    file: File,
+    purpose: "worker_proof" | "job_image" = "worker_proof",
+  ) => {
     const signatureResponse = await fetch("/api/uploads/cloudinary/signature", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ purpose }),
     });
     const signatureResult = await signatureResponse.json().catch(() => ({}));
     if (!signatureResponse.ok) {

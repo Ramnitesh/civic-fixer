@@ -62,6 +62,8 @@ export default function CreateJobPage() {
   const uploadToCloudinary = async (file: File) => {
     const signatureResponse = await fetch("/api/uploads/cloudinary/signature", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ purpose: "job_image" }),
     });
     const signatureResult = await signatureResponse.json().catch(() => ({}));
     if (!signatureResponse.ok) {

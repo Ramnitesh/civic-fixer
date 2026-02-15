@@ -636,7 +636,13 @@ export async function registerRoutes(
     }
 
     const timestamp = Math.floor(Date.now() / 1000);
-    const folder = "home/civicfix/worker/proof";
+    const uploadPurpose =
+      typeof req.body?.purpose === "string" ? req.body.purpose : "worker_proof";
+    const envName = process.env.NODE_ENV || "development";
+    const folder =
+      uploadPurpose === "job_image"
+        ? `${envName}/civicfix/job/images`
+        : `${envName}/civicfix/worker/proof`;
     const signature = createHash("sha1")
       .update(`folder=${folder}&timestamp=${timestamp}${config.apiSecret}`)
       .digest("hex");
