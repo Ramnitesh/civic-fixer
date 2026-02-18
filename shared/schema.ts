@@ -16,7 +16,6 @@ import { z } from "zod";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id"), // Alias for id for compatibility
   username: text("username").notNull().unique(), // Acts as login identifier (phone/email)
   password: text("password").notNull(),
   name: text("name").notNull(),
