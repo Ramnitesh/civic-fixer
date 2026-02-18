@@ -8,7 +8,23 @@ import { promisify } from "util";
 import { createHash } from "crypto";
 
 const scryptAsync = promisify(scrypt);
-const REVIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+const REVIEW_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours for worker execution
+const LEADER_EXECUTION_REVIEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days for leader execution
+const WORKER_EXECUTION_FEE_PERCENT = 5;
+// Leader execution: no platform fee
+const LEADER_EXECUTION_FEE_PERCENT = 0;
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function computeFeeAndWallet(collectedAmount: number, feePercent: number) {
+  // For LEADER_EXECUTION: feePercent is 0, so no platform fee deducted
+  // For WORKER_EXECUTION: fee is charged when paying worker, not upfront
+  const platformFeeAmount = roundMoney((collectedAmount * feePercent) / 100);
+  const walletBalance = roundMoney(collectedAmount - platformFeeAmount);
+  return { platformFeeAmount, walletBalance };
+}
 
 function getCloudinaryConfig() {
   const cloudinaryUrl = process.env.CLOUDINARY_URL;
@@ -49,6 +65,44 @@ function canEditJob(job: Awaited<ReturnType<typeof storage.getJob>>): boolean {
     return false;
   }
   return true;
+}
+
+function mapLegacyStatus(
+  status: string,
+):
+  | "FUNDING_OPEN"
+  | "FUNDING_COMPLETE"
+  | "IN_PROGRESS"
+  | "UNDER_REVIEW"
+  | "COMPLETED"
+  | "DISPUTED"
+  | "CANCELLED"
+  | "WORKER_SELECTED"
+  | "AWAITING_VERIFICATION" {
+  switch (status) {
+    case "CREATED":
+    case "FUNDING":
+      return "FUNDING_OPEN";
+    case "FUNDED":
+      return "FUNDING_COMPLETE";
+    case "LEADER_EXECUTING":
+      return "IN_PROGRESS";
+    case "REVIEW_WINDOW":
+      return "UNDER_REVIEW";
+    case "CLOSED":
+      return "COMPLETED";
+    default:
+      return status as
+        | "FUNDING_OPEN"
+        | "FUNDING_COMPLETE"
+        | "IN_PROGRESS"
+        | "UNDER_REVIEW"
+        | "COMPLETED"
+        | "DISPUTED"
+        | "CANCELLED"
+        | "WORKER_SELECTED"
+        | "AWAITING_VERIFICATION";
+  }
 }
 
 function normalizeMetadata(metadata: unknown): Record<string, unknown> {
@@ -116,18 +170,94 @@ async function finalizeReviewIfEligible(jobId: number) {
     return;
   }
 
-  const acceptedApp = await storage.getAcceptedApplicationByJob(job.id);
-  if (acceptedApp) {
-    const worker = await storage.getUser(acceptedApp.workerId);
-    if (worker) {
-      const payout = Math.max(acceptedApp.bidAmount - 500, 0);
-      await storage.updateUser(worker.id, {
-        totalEarnings: (worker.totalEarnings || 0) + payout,
-      });
+  // For WORKER_EXECUTION: pay worker
+  if (job.executionMode === "WORKER_EXECUTION") {
+    const acceptedApp = await storage.getAcceptedApplicationByJob(job.id);
+    if (acceptedApp) {
+      const worker = await storage.getUser(acceptedApp.workerId);
+      if (worker) {
+        const platformFee = roundMoney(
+          (acceptedApp.bidAmount * WORKER_EXECUTION_FEE_PERCENT) / 100,
+        );
+        const payout = Math.max(acceptedApp.bidAmount - platformFee, 0);
+        await storage.updateUser(worker.id, {
+          totalEarnings: (worker.totalEarnings || 0) + payout,
+        });
+      }
     }
+    await storage.updateJob(job.id, { status: "COMPLETED" });
+    return;
   }
 
-  await storage.updateJob(job.id, { status: "COMPLETED" });
+  // For LEADER_EXECUTION: calculate and refund remaining balance to contributors
+  if (job.executionMode === "LEADER_EXECUTION") {
+    const totalRaised = job.collectedAmount || 0;
+    const transactions = await storage.getJobExpenseTransactions(job.id);
+    const totalSpent = transactions.reduce(
+      (sum, tx) => sum + (tx.amount || 0),
+      0,
+    );
+    const remainingBalance = roundMoney(totalRaised - totalSpent);
+
+    const contributions = await storage.getContributionsByJob(job.id);
+
+    // Build refund details for each contributor
+    const refundDetails: Array<{
+      userId: number;
+      name: string;
+      phone: string;
+      contributionAmount: number;
+      refundAmount: number;
+    }> = [];
+
+    if (remainingBalance > 0 && totalRaised > 0) {
+      const refundRatio = remainingBalance / totalRaised;
+      for (const contribution of contributions) {
+        if (!contribution.userId) continue;
+        const contributor = await storage.getUser(contribution.userId);
+        if (contributor) {
+          const refundAmount = roundMoney(contribution.amount * refundRatio);
+          if (refundAmount > 0) {
+            await storage.updateUser(contributor.id, {
+              totalEarnings: (contributor.totalEarnings || 0) + refundAmount,
+            });
+            refundDetails.push({
+              userId: contributor.id,
+              name: contributor.name || "Unknown",
+              phone: contributor.phone || "",
+              contributionAmount: contribution.amount,
+              refundAmount,
+            });
+          }
+        }
+      }
+    }
+
+    const leader = await storage.getUser(job.leaderId);
+    if (leader) {
+      await storage.updateUser(job.leaderId, {
+        totalEarnings: (leader.totalEarnings || 0) + totalSpent,
+      });
+    }
+
+    // Store refund details in job metadata
+    const existingMetadata =
+      job.metadata && typeof job.metadata === "object"
+        ? (job.metadata as Record<string, unknown>)
+        : {};
+    await storage.updateJob(job.id, {
+      status: "COMPLETED",
+      walletBalance: 0,
+      metadata: {
+        ...existingMetadata,
+        refundDetails,
+        totalRaised,
+        totalSpent,
+        remainingBalance,
+        refundProcessedAt: new Date().toISOString(),
+      },
+    });
+  }
 }
 
 export async function registerRoutes(
@@ -136,16 +266,21 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuth(app);
 
-  if ((await storage.getJobs()).length === 0) {
-    const hashedPassword = await hashPassword("password123");
+  const hashedPassword = await hashPassword("password123");
 
-    const leader = await storage.createUser({
+  let leader = await storage.getUserByUsername("leader");
+  if (!leader) {
+    leader = await storage.createUser({
       username: "leader",
       password: hashedPassword,
       name: "Civic Leader",
       phone: "9876543210",
       role: "LEADER",
     });
+  }
+
+  const worker = await storage.getUserByUsername("worker");
+  if (!worker) {
     await storage.createUser({
       username: "worker",
       password: hashedPassword,
@@ -155,6 +290,10 @@ export async function registerRoutes(
       availability: "Weekdays",
       skillTags: ["waste-management"],
     });
+  }
+
+  const contributor = await storage.getUserByUsername("contributor");
+  if (!contributor) {
     await storage.createUser({
       username: "contributor",
       password: hashedPassword,
@@ -162,15 +301,37 @@ export async function registerRoutes(
       phone: "5544332211",
       role: "CONTRIBUTOR",
     });
+  }
 
+  if ((await storage.getJobs()).length === 0) {
     await storage.createJob({
       title: "Clean Park Bench",
       description: "Remove graffiti and repaint the bench in Central Park.",
       location: "Central Park, Sector 4",
       targetAmount: 2000,
       isPrivateResidentialProperty: false,
+      executionMode: "WORKER_EXECUTION",
       leaderId: leader.id,
     });
+  }
+
+  // One-time normalization for legacy statuses from older builds
+  const existingJobs = await storage.getJobs();
+  for (const existingJob of existingJobs) {
+    const normalizedStatus = mapLegacyStatus(existingJob.status);
+    let nextStatus = normalizedStatus;
+    if (
+      nextStatus === "FUNDING_OPEN" &&
+      (existingJob.collectedAmount || 0) >= existingJob.targetAmount
+    ) {
+      nextStatus =
+        existingJob.executionMode === "LEADER_EXECUTION"
+          ? "IN_PROGRESS"
+          : "FUNDING_COMPLETE";
+    }
+    if (nextStatus !== existingJob.status) {
+      await storage.updateJob(existingJob.id, { status: nextStatus });
+    }
   }
 
   app.patch(api.auth.updateProfile.path, async (req, res) => {
@@ -188,12 +349,32 @@ export async function registerRoutes(
     }
 
     let filtered = await storage.getJobs();
+    if (req.isAuthenticated() && req.user?.role === "WORKER") {
+      filtered = filtered.filter(
+        (job) => job.executionMode === "WORKER_EXECUTION",
+      );
+    }
     if (req.query.status)
       filtered = filtered.filter((j) => j.status === req.query.status);
     if (req.query.leaderId)
       filtered = filtered.filter(
         (j) => j.leaderId === Number(req.query.leaderId),
       );
+    if (req.query.contributorId) {
+      const contributorId = Number(req.query.contributorId);
+      const allJobs = await storage.getJobs();
+      const contributionJobIds = (
+        await Promise.all(
+          allJobs.map(async (job) => {
+            const contributions = await storage.getContributionsByJob(job.id);
+            return contributions.some((c) => c.userId === contributorId)
+              ? job.id
+              : null;
+          }),
+        )
+      ).filter(Boolean);
+      filtered = filtered.filter((j) => contributionJobIds.includes(j.id));
+    }
 
     const enriched = await Promise.all(
       filtered.map(async (job) => ({
@@ -213,21 +394,27 @@ export async function registerRoutes(
     }
 
     const input = api.jobs.create.input.parse(req.body);
-    if (input.targetAmount > 10000) {
-      return res
-        .status(400)
-        .json({ message: "Target amount must be ≤ ₹10,000" });
-    }
-
-    const { imageUrl, ...jobInput } = input;
+    const { imageUrl, executionMode, ...jobInput } = input;
+    const platformFeePercent =
+      executionMode === "LEADER_EXECUTION"
+        ? LEADER_EXECUTION_FEE_PERCENT
+        : WORKER_EXECUTION_FEE_PERCENT;
     const job = await storage.createJob({
       ...jobInput,
+      executionMode,
       leaderId: req.user!.id,
     });
+    const initializedJob = await storage.updateJob(job.id, {
+      status: "FUNDING_OPEN",
+      platformFeePercent,
+      platformFeeAmount: 0,
+      walletBalance: 0,
+      fundsFrozen: false,
+    });
     if (imageUrl) {
-      await storage.setJobImage(job.id, imageUrl);
+      await storage.setJobImage(initializedJob.id, imageUrl);
     }
-    res.status(201).json({ ...job, imageUrl: imageUrl ?? null });
+    res.status(201).json({ ...initializedJob, imageUrl: imageUrl ?? null });
   });
 
   app.get(api.jobs.get.path, async (req, res) => {
@@ -258,11 +445,31 @@ export async function registerRoutes(
     const contributorIds = Array.from(
       new Set(contributions.map((contribution) => contribution.userId)),
     );
-    const contributorProfiles = (
-      await Promise.all(
-        contributorIds.map((contributorId) => storage.getUser(contributorId)),
-      )
-    ).filter(Boolean);
+    const contributorProfiles = await Promise.all(
+      contributorIds.map(async (contributorId) => {
+        const profile = await storage.getUser(contributorId);
+        if (!profile) return null;
+        const userContributions = contributions.filter(
+          (c) => c.userId === contributorId,
+        );
+        const totalAmount = userContributions.reduce(
+          (sum, c) => sum + c.amount,
+          0,
+        );
+        const latestContribution = userContributions
+          .filter((c) => c.createdAt)
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt!).getTime() -
+              new Date(a.createdAt!).getTime(),
+          )[0];
+        return {
+          ...profile,
+          contributionAmount: totalAmount,
+          contributionDate: latestContribution?.createdAt || undefined,
+        };
+      }),
+    );
 
     res.json({
       ...job,
@@ -283,13 +490,44 @@ export async function registerRoutes(
 
     const id = Number(req.params.id);
     const updates = api.jobs.update.input.parse(req.body);
-    const { workerSubmissionMessage, ...jobUpdates } = updates;
+    const { workerSubmissionMessage, executionMode, ...jobUpdates } = updates;
     const job = await storage.getJob(id);
     if (!job) return res.status(404).json({ message: "Job not found" });
 
     const requesterId = Number(req.user!.id);
     const isAdmin = req.user!.role === "ADMIN";
     const isLeader = job.leaderId === requesterId;
+
+    if (executionMode && executionMode !== job.executionMode) {
+      if (!isAdmin && !isLeader) {
+        return res.status(403).json({
+          message: "Forbidden: only leader/admin can change execution mode",
+        });
+      }
+      if (job.status !== "FUNDING_OPEN") {
+        return res.status(400).json({
+          message:
+            "Execution mode can only be changed while status is FUNDING_OPEN",
+        });
+      }
+
+      const platformFeePercent =
+        executionMode === "LEADER_EXECUTION"
+          ? LEADER_EXECUTION_FEE_PERCENT
+          : WORKER_EXECUTION_FEE_PERCENT;
+      const feeCalc = computeFeeAndWallet(
+        job.collectedAmount || 0,
+        platformFeePercent,
+      );
+      const updated = await storage.updateJob(id, {
+        executionMode,
+        platformFeePercent,
+        platformFeeAmount: feeCalc.platformFeeAmount,
+        walletBalance: feeCalc.walletBalance,
+      });
+      return res.json(updated);
+    }
+
     const isWorkflowStatusUpdate =
       typeof updates.status === "string" &&
       ["IN_PROGRESS", "AWAITING_VERIFICATION"].includes(updates.status);
@@ -366,19 +604,7 @@ export async function registerRoutes(
       });
     }
 
-    if (updates.targetAmount && updates.targetAmount > 10000) {
-      return res
-        .status(400)
-        .json({ message: "Target amount must be ≤ ₹10,000" });
-    }
-
     if (updates.status === "FUNDING_COMPLETE") {
-      const contributorCount = await storage.getContributorCount(job.id);
-      if (contributorCount < 3) {
-        return res.status(400).json({
-          message: "Cannot close funding before minimum 3 contributors",
-        });
-      }
       if ((job.collectedAmount || 0) < job.targetAmount) {
         return res
           .status(400)
@@ -387,16 +613,84 @@ export async function registerRoutes(
     }
 
     if (updates.status === "UNDER_REVIEW") {
-      const proof = await storage.getJobProof(job.id);
-      if (!proof)
-        return res
-          .status(400)
-          .json({ message: "Cannot verify before proof upload" });
+      if (job.executionMode === "WORKER_EXECUTION") {
+        const proof = await storage.getJobProof(job.id);
+        if (!proof)
+          return res
+            .status(400)
+            .json({ message: "Cannot verify before proof upload" });
+      }
 
-      const updated = await storage.updateJob(job.id, {
+      // Use different review windows based on execution mode
+      const reviewWindowMs =
+        job.executionMode === "LEADER_EXECUTION"
+          ? LEADER_EXECUTION_REVIEW_WINDOW_MS
+          : REVIEW_WINDOW_MS;
+
+      // For LEADER_EXECUTION: calculate and store estimated refund details
+      // so contributors can see potential refund during review window
+      let jobUpdates: Record<string, unknown> = {
         status: "UNDER_REVIEW",
-        reviewDeadline: new Date(Date.now() + REVIEW_WINDOW_MS),
-      });
+        reviewDeadline: new Date(Date.now() + reviewWindowMs),
+      };
+
+      if (job.executionMode === "LEADER_EXECUTION") {
+        const totalRaised = job.collectedAmount || 0;
+        const transactions = await storage.getJobExpenseTransactions(job.id);
+        const totalSpent = transactions.reduce(
+          (sum, tx) => sum + (tx.amount || 0),
+          0,
+        );
+        const remainingBalance = roundMoney(totalRaised - totalSpent);
+
+        const contributions = await storage.getContributionsByJob(job.id);
+
+        // Build refund details for each contributor
+        const refundDetails: Array<{
+          userId: number;
+          name: string;
+          phone: string;
+          contributionAmount: number;
+          refundAmount: number;
+        }> = [];
+
+        if (remainingBalance > 0 && totalRaised > 0) {
+          const refundRatio = remainingBalance / totalRaised;
+          for (const contribution of contributions) {
+            if (!contribution.userId) continue;
+            const contributor = await storage.getUser(contribution.userId);
+            if (contributor) {
+              const refundAmount = roundMoney(
+                contribution.amount * refundRatio,
+              );
+              if (refundAmount > 0) {
+                refundDetails.push({
+                  userId: contributor.id,
+                  name: contributor.name || "Unknown",
+                  phone: contributor.phone || "",
+                  contributionAmount: contribution.amount,
+                  refundAmount,
+                });
+              }
+            }
+          }
+        }
+
+        // Store refund details in job metadata
+        const existingMetadata =
+          job.metadata && typeof job.metadata === "object"
+            ? (job.metadata as Record<string, unknown>)
+            : {};
+        jobUpdates.metadata = {
+          ...existingMetadata,
+          refundDetails,
+          totalRaised,
+          totalSpent,
+          remainingBalance,
+        };
+      }
+
+      const updated = await storage.updateJob(job.id, jobUpdates);
       return res.json(updated);
     }
 
@@ -423,16 +717,16 @@ export async function registerRoutes(
     if (
       job.selectedWorkerId ||
       [
-        "WORKER_SELECTED",
-        "IN_PROGRESS",
         "AWAITING_VERIFICATION",
         "UNDER_REVIEW",
         "COMPLETED",
         "DISPUTED",
+        "CANCELLED",
       ].includes(job.status)
     ) {
       return res.status(400).json({
-        message: "Contributions are closed once a worker is selected",
+        message:
+          "Contributions are closed once a worker submitted work for review or job is completed/cancelled",
       });
     }
 
@@ -440,10 +734,6 @@ export async function registerRoutes(
       input.jobId,
       req.user!.id,
     );
-    if (alreadyContributed)
-      return res
-        .status(409)
-        .json({ message: "You can contribute only once per job" });
 
     const contribution = await storage.createContribution({
       jobId: input.jobId,
@@ -452,13 +742,31 @@ export async function registerRoutes(
     });
 
     const refreshedJob = await storage.getJob(input.jobId);
-    const contributorCount = await storage.getContributorCount(input.jobId);
-    if (
-      refreshedJob &&
-      (refreshedJob.collectedAmount || 0) >= refreshedJob.targetAmount &&
-      contributorCount >= 3
-    ) {
-      await storage.updateJob(refreshedJob.id, { status: "FUNDING_COMPLETE" });
+    if (refreshedJob) {
+      // For WORKER_EXECUTION: no fee deducted from contributions
+      // Fee (5%) is only charged when paying the worker
+      // For LEADER_EXECUTION: no fee at all (already set to 0)
+      const feePercent =
+        refreshedJob.executionMode === "WORKER_EXECUTION"
+          ? 0 // No fee on contributions for worker mode
+          : 0; // No fee for leader execution mode
+      const feeCalc = computeFeeAndWallet(
+        refreshedJob.collectedAmount || 0,
+        feePercent,
+      );
+
+      const nextStatus =
+        (refreshedJob.collectedAmount || 0) >= refreshedJob.targetAmount
+          ? refreshedJob.executionMode === "LEADER_EXECUTION"
+            ? "IN_PROGRESS"
+            : "FUNDING_COMPLETE"
+          : "FUNDING_OPEN";
+
+      await storage.updateJob(refreshedJob.id, {
+        status: nextStatus,
+        platformFeeAmount: feeCalc.platformFeeAmount,
+        walletBalance: feeCalc.walletBalance,
+      });
     }
 
     res.status(201).json(contribution);
@@ -478,13 +786,19 @@ export async function registerRoutes(
     const input = api.applications.create.input.parse(req.body);
     const job = await storage.getJob(input.jobId);
     if (!job) return res.status(404).json({ message: "Job not found" });
+    if (job.executionMode !== "WORKER_EXECUTION") {
+      return res.status(400).json({
+        message:
+          "Worker applications are not allowed for LEADER_EXECUTION jobs",
+      });
+    }
     if (job.leaderId === req.user!.id)
       return res
         .status(400)
         .json({ message: "You cannot apply to your own job" });
-    if (!["FUNDING_OPEN", "FUNDING_COMPLETE"].includes(job.status)) {
+    if (job.status !== "FUNDING_COMPLETE") {
       return res.status(400).json({
-        message: "Applications are only allowed while funding is open",
+        message: "Applications are only allowed once funding is completed",
       });
     }
 
@@ -567,6 +881,11 @@ export async function registerRoutes(
 
     const job = await storage.getJob(input.jobId);
     if (!job) return res.status(404).json({ message: "Job not found" });
+    if (job.executionMode !== "WORKER_EXECUTION") {
+      return res.status(400).json({
+        message: "Proof uploads are only for WORKER_EXECUTION jobs",
+      });
+    }
     if (job.selectedWorkerId !== req.user!.id) {
       return res
         .status(403)
@@ -599,6 +918,11 @@ export async function registerRoutes(
 
     const job = await storage.getJob(input.jobId);
     if (!job) return res.status(404).json({ message: "Job not found" });
+    if (job.executionMode !== "WORKER_EXECUTION") {
+      return res.status(400).json({
+        message: "Proof drafts are only for WORKER_EXECUTION jobs",
+      });
+    }
     if (job.selectedWorkerId !== req.user!.id) {
       return res
         .status(403)
@@ -662,10 +986,15 @@ export async function registerRoutes(
 
     const job = await storage.getJob(input.jobId);
     if (!job) return res.status(404).json({ message: "Job not found" });
-    if (job.status !== "UNDER_REVIEW" || !job.reviewDeadline) {
-      return res
-        .status(400)
-        .json({ message: "Disputes can only be raised during review window" });
+    const isWorkerModeWindow =
+      job.executionMode === "WORKER_EXECUTION" && job.status === "UNDER_REVIEW";
+    const isLeaderModeWindow =
+      job.executionMode === "LEADER_EXECUTION" && job.status === "UNDER_REVIEW";
+    if ((!isWorkerModeWindow && !isLeaderModeWindow) || !job.reviewDeadline) {
+      return res.status(400).json({
+        message:
+          "Disputes can only be raised during the active review window for the current execution mode",
+      });
     }
     if (new Date(job.reviewDeadline).getTime() < Date.now()) {
       return res.status(400).json({ message: "Review window has ended" });
@@ -709,7 +1038,10 @@ export async function registerRoutes(
       raisedEvidencePhotoUrl: input.evidencePhotoUrl,
     });
 
-    await storage.updateJob(input.jobId, { status: "DISPUTED" });
+    await storage.updateJob(input.jobId, {
+      status: "DISPUTED",
+      fundsFrozen: job.executionMode === "LEADER_EXECUTION",
+    });
     console.info(
       `[notification] Dispute raised for job #${job.id}: notify worker #${job.selectedWorkerId} and leader #${job.leaderId}`,
     );
@@ -803,11 +1135,41 @@ export async function registerRoutes(
     if (!job) return res.status(404).json({ message: "Job not found" });
 
     if (input.action === "APPROVE_WORK") {
+      if (job.executionMode === "LEADER_EXECUTION") {
+        const updatedDispute = await storage.updateDisputeStatus(
+          dispute.id,
+          "RESOLVED",
+        );
+        await storage.updateJob(job.id, {
+          status: "UNDER_REVIEW",
+          fundsFrozen: false,
+        });
+
+        const existingDetails =
+          (await storage.getDisputeDetails(dispute.id)) ?? {};
+        const nextDetails = {
+          ...existingDetails,
+          adminDecision: {
+            action: input.action,
+            decidedById: req.user!.id,
+            decidedAt: new Date().toISOString(),
+          },
+        };
+        await storage.setDisputeDetails(dispute.id, nextDetails);
+        await persistDisputeDetails(job.id, dispute.id, nextDetails);
+
+        return res.json(updatedDispute);
+      }
+
       const acceptedApp = await storage.getAcceptedApplicationByJob(job.id);
       if (acceptedApp) {
         const worker = await storage.getUser(acceptedApp.workerId);
         if (worker) {
-          const payout = Math.max(acceptedApp.bidAmount - 500, 0);
+          // Deduct 5% platform fee when paying worker
+          const platformFee = roundMoney(
+            (acceptedApp.bidAmount * WORKER_EXECUTION_FEE_PERCENT) / 100,
+          );
+          const payout = Math.max(acceptedApp.bidAmount - platformFee, 0);
           await storage.updateUser(worker.id, {
             totalEarnings: (worker.totalEarnings || 0) + payout,
           });
@@ -836,7 +1198,10 @@ export async function registerRoutes(
     }
 
     await storage.markContributionsRefunded(job.id);
-    await storage.updateJob(job.id, { status: "CANCELLED" });
+    await storage.updateJob(job.id, {
+      status: "CANCELLED",
+      fundsFrozen: job.executionMode === "LEADER_EXECUTION",
+    });
     const updatedDispute = await storage.updateDisputeStatus(
       dispute.id,
       "REJECTED",
@@ -890,6 +1255,82 @@ export async function registerRoutes(
         })),
       ),
     );
+  });
+
+  app.post(api.jobs.createExpense.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    const jobId = Number(req.params.id);
+    const input = api.jobs.createExpense.input.parse(req.body);
+    const job = await storage.getJob(jobId);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+
+    const isAdmin = req.user!.role === "ADMIN";
+    const isLeader = job.leaderId === req.user!.id;
+    if (!isAdmin && !isLeader) {
+      return res
+        .status(403)
+        .json({ message: "Only job leader/admin can create expenses" });
+    }
+    if (job.executionMode !== "LEADER_EXECUTION") {
+      return res.status(400).json({
+        message: "Expenses are allowed only for LEADER_EXECUTION jobs",
+      });
+    }
+    if (job.status !== "IN_PROGRESS") {
+      return res.status(400).json({
+        message: "Expenses can be created only while job is IN_PROGRESS",
+      });
+    }
+    if (job.fundsFrozen) {
+      return res
+        .status(400)
+        .json({ message: "Funds are frozen due to an active dispute" });
+    }
+
+    const transactions = await storage.getJobExpenseTransactions(job.id);
+    const totalSpent = transactions.reduce(
+      (sum, tx) => sum + (tx.amount || 0),
+      0,
+    );
+    const remaining = roundMoney((job.walletBalance || 0) - totalSpent);
+    if (input.amount > remaining) {
+      return res.status(400).json({
+        message: "Expense exceeds remaining wallet balance",
+      });
+    }
+
+    const created = await storage.createJobExpenseTransaction({
+      jobId: job.id,
+      leaderId: req.user!.id,
+      amount: input.amount,
+      description: input.description,
+      proofUrl: input.proofUrl,
+    });
+
+    return res.status(201).json(created);
+  });
+
+  app.get(api.jobs.ledger.path, async (req, res) => {
+    const jobId = Number(req.params.id);
+    const job = await storage.getJob(jobId);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+
+    const transactions = await storage.getJobExpenseTransactions(job.id);
+    const totalSpent = roundMoney(
+      transactions.reduce((sum, tx) => sum + (tx.amount || 0), 0),
+    );
+    const totalRaised = roundMoney(job.collectedAmount || 0);
+    const remainingBalance = roundMoney((job.walletBalance || 0) - totalSpent);
+
+    return res.json({
+      totalRaised,
+      totalSpent,
+      remainingBalance,
+      platformFeePercent: job.platformFeePercent || 0,
+      platformFeeAmount: job.platformFeeAmount || 0,
+      transactions,
+    });
   });
 
   return httpServer;

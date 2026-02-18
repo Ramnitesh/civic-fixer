@@ -2,7 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Navigation } from "@/components/Navigation";
 import { useJobs } from "@/hooks/use-jobs";
 import { JobCard } from "@/components/JobCard";
-import { Loader2, PlusCircle, Wallet, Award, Briefcase } from "lucide-react";
+import { Loader2, PlusCircle, Wallet, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,9 +13,13 @@ export default function DashboardPage() {
   // Fetch jobs relevant to the user
   // Leader: jobs they created
   // Worker: jobs they are assigned to (status != FUNDING_OPEN)
-  // Contributor: jobs they funded (future implementation)
+  // Contributor: jobs they funded
   const { data: jobs, isLoading: jobsLoading } = useJobs(
-    user?.role === "LEADER" ? { leaderId: String(user.id) } : undefined,
+    user?.role === "LEADER"
+      ? { leaderId: String(user.id) }
+      : user?.role === "CONTRIBUTOR"
+        ? { contributorId: String(user.id) }
+        : undefined,
   );
 
   if (authLoading || jobsLoading) {
@@ -51,61 +55,11 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Stats Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Impact
-              </CardTitle>
-              <Briefcase className="w-4 h-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{jobs?.length || 0} Jobs</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {user.role === "LEADER" ? "Created by you" : "Participated in"}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Wallet Balance
-              </CardTitle>
-              <Wallet className="w-4 h-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                ₹{user.totalEarnings || 0}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Available for withdrawal
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Reputation Score
-              </CardTitle>
-              <Award className="w-4 h-4 text-orange-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {user.rating?.toFixed(1) || "5.0"}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Based on community feedback
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Active Jobs Section */}
         <div className="mb-6">
-          <h2 className="text-xl font-bold mb-4 font-display">Active Jobs</h2>
+          <h2 className="text-xl font-bold mb-4 font-display">
+            Active Jobs ({jobs?.length || 0})
+          </h2>
           {jobs?.length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed rounded-xl bg-muted/10">
               <p className="text-muted-foreground">No active jobs found.</p>

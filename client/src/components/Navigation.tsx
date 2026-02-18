@@ -1,7 +1,15 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Menu, Home, Briefcase, PlusCircle, LogOut } from "lucide-react";
+import {
+  Menu,
+  Home,
+  Briefcase,
+  PlusCircle,
+  LogOut,
+  Wallet,
+  Star,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -79,11 +87,6 @@ export function Navigation() {
               <NavLink href="/jobs" icon={Briefcase}>
                 Browse Jobs
               </NavLink>
-              {user.role === "LEADER" && (
-                <NavLink href="/create-job" icon={PlusCircle}>
-                  Create Job
-                </NavLink>
-              )}
             </>
           ) : (
             <NavLink href="/jobs" icon={Briefcase}>
@@ -95,7 +98,23 @@ export function Navigation() {
         <div className="hidden md:flex items-center gap-4">
           {user ? (
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3 pr-4 border-r">
+              {/* Wallet Balance */}
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200">
+                <Wallet className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-semibold text-green-700">
+                  ₹{user.totalEarnings || 0}
+                </span>
+              </div>
+              {/* Reputation Score */}
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 rounded-lg border border-orange-200">
+                <Star className="w-4 h-4 text-orange-500" />
+                <span className="text-sm font-semibold text-orange-700">
+                  {user.rating?.toFixed(1) || "5.0"}
+                </span>
+              </div>
+
+              {/* Profile */}
+              <div className="flex items-center gap-3 pl-4 border-l">
                 <div className="text-right hidden lg:block">
                   <p className="text-sm font-semibold leading-none">
                     {user.name}
@@ -202,6 +221,21 @@ export function Navigation() {
               <div className="flex flex-col gap-4 mt-8">
                 {user ? (
                   <>
+                    {/* Wallet Balance - Mobile */}
+                    <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-green-50 rounded-lg border border-green-200">
+                      <Wallet className="w-5 h-5 text-green-600" />
+                      <span className="text-sm font-semibold text-green-700">
+                        Wallet: ₹{user.totalEarnings || 0}
+                      </span>
+                    </div>
+                    {/* Reputation Score - Mobile */}
+                    <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-orange-50 rounded-lg border border-orange-200">
+                      <Star className="w-5 h-5 text-orange-500" />
+                      <span className="text-sm font-semibold text-orange-700">
+                        Rating: {user.rating?.toFixed(1) || "5.0"}
+                      </span>
+                    </div>
+
                     <div className="flex items-center gap-3 pb-6 border-b mb-2">
                       <Avatar className="h-10 w-10">
                         <AvatarFallback>

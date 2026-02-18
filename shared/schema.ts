@@ -16,6 +16,7 @@ import { z } from "zod";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id"), // Alias for id for compatibility
   username: text("username").notNull().unique(), // Acts as login identifier (phone/email)
   password: text("password").notNull(),
   name: text("name").notNull(),
@@ -40,6 +41,9 @@ export const jobs = pgTable("jobs", {
     .notNull()
     .default(false),
   collectedAmount: real("collected_amount").default(0.0),
+  executionMode: text("execution_mode", {
+    enum: ["WORKER_EXECUTION", "LEADER_EXECUTION"],
+  }).notNull(),
   status: text("status", {
     enum: [
       "FUNDING_OPEN",
@@ -55,9 +59,14 @@ export const jobs = pgTable("jobs", {
   })
     .notNull()
     .default("FUNDING_OPEN"),
+  platformFeePercent: real("platform_fee_percent").notNull().default(0),
+  platformFeeAmount: real("platform_fee_amount").notNull().default(0),
+  walletBalance: real("wallet_balance").notNull().default(0),
+  fundsFrozen: boolean("funds_frozen").notNull().default(false),
   leaderId: integer("leader_id").notNull(),
   selectedWorkerId: integer("selected_worker_id"),
   reviewDeadline: timestamp("review_deadline"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -112,6 +121,16 @@ export const disputes = pgTable("disputes", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const jobExpenseTransactions = pgTable("job_expense_transactions", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").notNull(),
+  leaderId: integer("leader_id").notNull(),
+  amount: real("amount").notNull(),
+  description: text("description").notNull(),
+  proofUrl: text("proof_url").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // === RELATIONS ===
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -140,6 +159,7 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
     references: [jobProofs.jobId],
   }),
   disputes: many(disputes),
+  expenses: many(jobExpenseTransactions),
 }));
 
 export const contributionsRelations = relations(contributions, ({ one }) => ({
@@ -185,6 +205,20 @@ export const disputesRelations = relations(disputes, ({ one }) => ({
   }),
 }));
 
+export const jobExpenseTransactionsRelations = relations(
+  jobExpenseTransactions,
+  ({ one }) => ({
+    job: one(jobs, {
+      fields: [jobExpenseTransactions.jobId],
+      references: [jobs.id],
+    }),
+    leader: one(users, {
+      fields: [jobExpenseTransactions.leaderId],
+      references: [users.id],
+    }),
+  }),
+);
+
 // === BASE SCHEMAS ===
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -199,6 +233,10 @@ export const insertJobSchema = createInsertSchema(jobs).omit({
   createdAt: true,
   collectedAmount: true,
   status: true,
+  platformFeePercent: true,
+  platformFeeAmount: true,
+  walletBalance: true,
+  fundsFrozen: true,
   selectedWorkerId: true,
   reviewDeadline: true,
 });
@@ -230,6 +268,13 @@ export const insertDisputeSchema = createInsertSchema(disputes).omit({
   status: true,
 });
 
+export const insertJobExpenseTransactionSchema = createInsertSchema(
+  jobExpenseTransactions,
+).omit({
+  id: true,
+  createdAt: true,
+});
+
 // === EXPLICIT API CONTRACT TYPES ===
 
 export type User = typeof users.$inferSelect;
@@ -252,6 +297,11 @@ export type InsertJobProof = z.infer<typeof insertJobProofSchema>;
 export type Dispute = typeof disputes.$inferSelect;
 export type InsertDispute = z.infer<typeof insertDisputeSchema>;
 
+export type JobExpenseTransaction = typeof jobExpenseTransactions.$inferSelect;
+export type InsertJobExpenseTransaction = z.infer<
+  typeof insertJobExpenseTransactionSchema
+>;
+
 export type UpdateUserProfileRequest = Partial<
   Pick<User, "name" | "phone" | "availability" | "skillTags">
 >;
@@ -263,6 +313,7 @@ export type CreateJobRequest = Pick<
   | "location"
   | "targetAmount"
   | "isPrivateResidentialProperty"
+  | "executionMode"
 >;
 export type UpdateJobRequest = Partial<CreateJobRequest> & {
   status?: Job["status"];

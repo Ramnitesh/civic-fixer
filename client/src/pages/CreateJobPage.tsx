@@ -29,13 +29,19 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Override schema for form validation to handle string -> number coercion
 const formSchema = insertJobSchema.extend({
   targetAmount: z.coerce
     .number()
-    .positive("Target amount must be greater than 0")
-    .max(10000, "Maximum amount is ₹10,000"),
+    .positive("Target amount must be greater than 0"),
   leaderId: z.number().optional(), // Injected by backend/hook logic usually, but here we can rely on backend to assign from session
   imageUrl: z.string().url().optional(),
 });
@@ -55,6 +61,7 @@ export default function CreateJobPage() {
       location: "",
       targetAmount: undefined,
       isPrivateResidentialProperty: false,
+      executionMode: undefined,
       imageUrl: undefined,
     },
   });
@@ -208,9 +215,6 @@ export default function CreateJobPage() {
                       <FormControl>
                         <Input type="number" placeholder="500" {...field} />
                       </FormControl>
-                      <FormDescription>
-                        Maximum allowed is ₹10,000.
-                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -236,6 +240,39 @@ export default function CreateJobPage() {
                           onCheckedChange={field.onChange}
                         />
                       </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="executionMode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Execution Mode</FormLabel>
+                      <FormControl>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select execution mode" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="WORKER_EXECUTION">
+                              Worker Execution (escrow)
+                            </SelectItem>
+                            <SelectItem value="LEADER_EXECUTION">
+                              Leader Execution (expense ledger)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormDescription>
+                        Choose how this job will be executed. This can only be
+                        changed while job status is CREATED.
+                      </FormDescription>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />

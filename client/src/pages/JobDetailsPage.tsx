@@ -4,7 +4,7 @@ import { useJob, useUpdateJob } from "@/hooks/use-jobs";
 import { useAuth } from "@/hooks/use-auth";
 import { useCreateContribution } from "@/hooks/use-contributions";
 import { useApplications, useApplyForJob } from "@/hooks/use-applications";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useMemo, useState } from "react";
@@ -26,6 +26,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function JobDetailsPage() {
   const { id: idParam } = useParams();
@@ -39,6 +45,12 @@ export default function JobDetailsPage() {
   const { mutate: apply, isPending: isApplying } = useApplyForJob();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Modal state for contributor profiles
+  const [showContributorsModal, setShowContributorsModal] = useState(false);
+
+  // Modal state for edit job
+  const [showEditJobModal, setShowEditJobModal] = useState(false);
 
   const [contributionAmount, setContributionAmount] = useState("100");
   const [bidAmount, setBidAmount] = useState("");
@@ -64,14 +76,32 @@ export default function JobDetailsPage() {
   const [workerDisputeFile, setWorkerDisputeFile] = useState<File | null>(null);
   const [leaderClarificationMessage, setLeaderClarificationMessage] =
     useState("");
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseDescription, setExpenseDescription] = useState("");
+  const [expenseProofFile, setExpenseProofFile] = useState<File | null>(null);
+  const [isUploadingExpenseProof, setIsUploadingExpenseProof] = useState(false);
 
-  const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editTargetAmount, setEditTargetAmount] = useState("");
   const [editPrivateProperty, setEditPrivateProperty] = useState(false);
   const [now, setNow] = useState(Date.now());
+
+  const { data: ledger } = useQuery({
+    queryKey: [api.jobs.ledger.path, id],
+    queryFn: async () => {
+      const res = await fetch(api.jobs.ledger.path.replace(":id", String(id)));
+      if (!res.ok) {
+        const message =
+          (await res.json().catch(() => null))?.message ??
+          "Failed to load ledger";
+        throw new Error(message);
+      }
+      return res.json();
+    },
+    enabled: !!id && job?.executionMode === "LEADER_EXECUTION",
+  });
 
   useEffect(() => {
     if (!job) return;
@@ -343,6 +373,48 @@ export default function JobDetailsPage() {
     },
   });
 
+  const createExpenseMutation = useMutation({
+    mutationFn: async (payload: {
+      amount: number;
+      description: string;
+      proofUrl: string;
+    }) => {
+      const res = await fetch(
+        api.jobs.createExpense.path.replace(":id", String(id)),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!res.ok) {
+        const message =
+          (await res.json().catch(() => null))?.message ??
+          "Unable to add expense";
+        throw new Error(message);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.jobs.ledger.path, id] });
+      queryClient.invalidateQueries({ queryKey: [api.jobs.get.path, id] });
+      setExpenseAmount("");
+      setExpenseDescription("");
+      setExpenseProofFile(null);
+      toast({
+        title: "Expense added",
+        description: "Expense entry has been saved to the ledger.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Unable to add expense",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const uploadToCloudinary = async (
     file: File,
     purpose: "worker_proof" | "job_image" = "worker_proof",
@@ -407,8 +479,12 @@ export default function JobDetailsPage() {
   };
 
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
-  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`Help fund this cleanup job: ${shareUrl}`)}`;
-  const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`Support this cleanup job: ${shareUrl}`)}`;
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(
+    `Help fund this cleanup job: ${shareUrl}`,
+  )}`;
+  const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+    `Support this cleanup job: ${shareUrl}`,
+  )}`;
 
   const proofMedia = [
     {
@@ -429,17 +505,21 @@ export default function JobDetailsPage() {
   const beforeStepDone = Boolean(proofMedia[0]?.url);
   const afterStepDone = Boolean(proofMedia[1]?.url);
   const disposalStepDone = Boolean(proofMedia[2]?.url);
+
+  // Hide Step Progress when job is leader execution mode (Task #3)
   const shouldShowStepProgress =
-    hasAnyProofMedia ||
-    Boolean(job?.selectedWorkerId) ||
-    [
-      "WORKER_SELECTED",
-      "IN_PROGRESS",
-      "AWAITING_VERIFICATION",
-      "UNDER_REVIEW",
-      "COMPLETED",
-      "DISPUTED",
-    ].includes(String(job?.status || ""));
+    job?.executionMode !== "LEADER_EXECUTION" &&
+    (hasAnyProofMedia ||
+      Boolean(job?.selectedWorkerId) ||
+      [
+        "WORKER_SELECTED",
+        "IN_PROGRESS",
+        "AWAITING_VERIFICATION",
+        "UNDER_REVIEW",
+        "COMPLETED",
+        "DISPUTED",
+      ].includes(String(job?.status || "")));
+
   const proofMetadata =
     (job?.proof?.metadata as Record<string, unknown> | undefined) ?? {};
   const workerSubmittedNote =
@@ -549,7 +629,10 @@ export default function JobDetailsPage() {
       return;
     }
     if (!disposalFile) {
-      toast({ title: "Select disposal file first", variant: "destructive" });
+      toast({
+        title: "Select disposal file first",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -640,11 +723,21 @@ export default function JobDetailsPage() {
   const canContribute =
     user &&
     ["LEADER", "CONTRIBUTOR", "ADMIN"].includes(user.role) &&
-    !job.selectedWorkerId;
-  const canEditJob =
-    isCreator &&
     !job.selectedWorkerId &&
-    !["COMPLETED", "DISPUTED"].includes(job.status);
+    ![
+      "AWAITING_VERIFICATION",
+      "UNDER_REVIEW",
+      "COMPLETED",
+      "DISPUTED",
+      "CANCELLED",
+    ].includes(job.status);
+  const canEditJob =
+    isCreator && !job.selectedWorkerId && job.status === "FUNDING_OPEN";
+
+  const canAddExpenses =
+    (isCreator || isAdmin) &&
+    job.executionMode === "LEADER_EXECUTION" &&
+    job.status === "IN_PROGRESS";
   const myApplication = applications.find((a: any) => a.workerId === user?.id);
   const hasApplied = Boolean(myApplication);
 
@@ -680,6 +773,34 @@ export default function JobDetailsPage() {
     return contributorProfile?.name || `User #${id}`;
   };
 
+  // Get contributor profiles for modal
+  const contributorProfiles = (job as any)?.contributorProfiles || [];
+  const contributorCount =
+    job.contributorCount ?? job.contributions?.length ?? 0;
+
+  // Get refund details from job metadata
+  const jobMetadata = (job as any)?.metadata as
+    | Record<string, unknown>
+    | undefined;
+  const refundDetails = jobMetadata?.refundDetails as
+    | Array<{
+        userId: number;
+        name: string;
+        phone: string;
+        contributionAmount: number;
+        refundAmount: number;
+      }>
+    | undefined;
+  const totalRaised = jobMetadata?.totalRaised as number | undefined;
+  const totalSpent = jobMetadata?.totalSpent as number | undefined;
+  const remainingBalance = jobMetadata?.remainingBalance as number | undefined;
+  const refundProcessedAt = jobMetadata?.refundProcessedAt as
+    | string
+    | undefined;
+  const isJobCompleted = job.status === "COMPLETED";
+  const isJobUnderReview = job.status === "UNDER_REVIEW";
+  const canViewRefund = isJobCompleted || isJobUnderReview;
+
   return (
     <div className="min-h-screen bg-background pb-16">
       <Navigation />
@@ -701,8 +822,9 @@ export default function JobDetailsPage() {
           Back
         </Button>
 
+        {/* Task #5: Move progress bar to job state header */}
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="flex-1">
             <h1 className="text-3xl font-bold">{job.title}</h1>
             <div className="text-sm text-muted-foreground flex items-center gap-3 mt-2">
               <span className="inline-flex items-center gap-1">
@@ -716,15 +838,33 @@ export default function JobDetailsPage() {
                   : ""}
               </span>
             </div>
+            {/* Task #5: Progress bar in job state header */}
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                <span>Progress</span>
+                <span>
+                  {job.status.replace("_", " ")} ({workerProgress}%)
+                </span>
+              </div>
+              <Progress value={workerProgress} className="h-2" />
+            </div>
           </div>
-          <Badge>{job.status}</Badge>
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle>Job Details</CardTitle>
+                {canEditJob && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowEditJobModal(true)}
+                  >
+                    Edit Job
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="whitespace-pre-wrap text-sm text-muted-foreground">
@@ -745,79 +885,33 @@ export default function JobDetailsPage() {
                   </a>
                 )}
 
-                {canEditJob && (
-                  <div className="border rounded-lg p-4 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-semibold">Edit Job</h3>
+                {/* Leader Execution Mode - Mark as Completed */}
+                {isCreator &&
+                  job.executionMode === "LEADER_EXECUTION" &&
+                  job.status === "IN_PROGRESS" && (
+                    <div className="border rounded-lg p-4 space-y-3">
+                      <h3 className="font-semibold">
+                        Mark Execution Completed
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Once you mark execution as completed, contributors will
+                        have 7 days to review the work and raise disputes if
+                        needed.
+                      </p>
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsEditing((v) => !v)}
+                        onClick={() =>
+                          updateJob({ id, status: "UNDER_REVIEW" })
+                        }
+                        disabled={isUpdatingJob}
                       >
-                        {isEditing ? "Cancel" : "Edit"}
+                        Mark Execution Completed
                       </Button>
                     </div>
-                    {isEditing && (
-                      <div className="space-y-2">
-                        <Input
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          placeholder="Title"
-                        />
-                        <Textarea
-                          value={editDescription}
-                          onChange={(e) => setEditDescription(e.target.value)}
-                          placeholder="Description"
-                        />
-                        <Input
-                          value={editLocation}
-                          onChange={(e) => setEditLocation(e.target.value)}
-                          placeholder="Location"
-                        />
-                        <Input
-                          type="number"
-                          value={editTargetAmount}
-                          onChange={(e) => setEditTargetAmount(e.target.value)}
-                          placeholder="Target amount"
-                        />
-                        <div className="flex items-center justify-between rounded border p-3">
-                          <span className="text-sm">
-                            Private residential property
-                          </span>
-                          <Switch
-                            checked={editPrivateProperty}
-                            onCheckedChange={setEditPrivateProperty}
-                          />
-                        </div>
-                        <Button
-                          disabled={isUpdatingJob}
-                          onClick={() => {
-                            updateJob(
-                              {
-                                id,
-                                title: editTitle,
-                                description: editDescription,
-                                location: editLocation,
-                                targetAmount: Number(editTargetAmount),
-                                isPrivateResidentialProperty:
-                                  editPrivateProperty,
-                              },
-                              {
-                                onSuccess: () => {
-                                  setIsEditing(false);
-                                },
-                              },
-                            );
-                          }}
-                        >
-                          Save Changes
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
 
+                {/* Worker Execution Mode - Verify completion */}
                 {isCreator &&
+                  job.executionMode === "WORKER_EXECUTION" &&
                   (job.status === "AWAITING_VERIFICATION" ||
                     job.status === "UNDER_REVIEW") && (
                     <div className="border rounded-lg p-4 space-y-3">
@@ -1044,127 +1138,157 @@ export default function JobDetailsPage() {
               </CardContent>
             </Card>
 
-            {!isWorker && (canViewApplications || job.selectedWorker) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Worker Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {job.selectedWorker &&
-                    (isCreator || isContributor || isAdmin) && (
-                      <div className="border rounded p-3 bg-muted/20">
-                        <p className="font-semibold mb-1">Selected Worker</p>
-                        <p className="text-sm font-medium">
-                          {job.selectedWorker.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Phone: {job.selectedWorker.phone}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Availability:{" "}
-                          {job.selectedWorker.availability || "Not specified"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Skills:{" "}
-                          {Array.isArray(job.selectedWorker.skillTags) &&
-                          job.selectedWorker.skillTags.length > 0
-                            ? job.selectedWorker.skillTags.join(", ")
-                            : "Not specified"}
-                        </p>
-                      </div>
-                    )}
-
-                  {canViewApplications && (
-                    <>
-                      <p className="text-sm font-medium">
-                        All Worker Applications
-                      </p>
-                      {applications.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          No applications yet.
-                        </p>
-                      ) : (
-                        applications.map((app: any) => (
-                          <div
-                            key={app.id}
-                            className="border rounded p-3 flex items-center justify-between"
-                          >
-                            <div>
-                              <p className="font-medium">
-                                {app.worker?.name || `Worker #${app.workerId}`}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                Bid: ₹{app.bidAmount}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Phone: {app.worker?.phone || "N/A"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Availability:{" "}
-                                {app.worker?.availability || "Not specified"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Skills:{" "}
-                                {Array.isArray(app.worker?.skillTags) &&
-                                app.worker.skillTags.length > 0
-                                  ? app.worker.skillTags.join(", ")
-                                  : "Not specified"}
-                              </p>
-                            </div>
-                            {canManageWorkerSelection ? (
-                              <Button
-                                size="sm"
-                                disabled={
-                                  acceptMutation.isPending ||
-                                  (Boolean(job.selectedWorkerId) && !isAdmin)
-                                }
-                                onClick={() => acceptMutation.mutate(app.id)}
-                              >
-                                {isAdmin &&
-                                job.selectedWorkerId &&
-                                job.selectedWorkerId !== app.workerId
-                                  ? "Reassign"
-                                  : "Select"}
-                              </Button>
-                            ) : (
-                              <Badge variant="outline">Readonly</Badge>
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {(isCreator || isContributor || isAdmin) &&
-              Array.isArray((job as any).contributorProfiles) &&
-              (job as any).contributorProfiles.length > 0 && (
+            {!isWorker &&
+              job.executionMode === "WORKER_EXECUTION" &&
+              (canViewApplications || job.selectedWorker) && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Contributor Profiles</CardTitle>
+                    <CardTitle>Worker Details</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {(job as any).contributorProfiles.map(
-                      (contributor: any) => (
-                        <div
-                          key={contributor.id}
-                          className="border rounded p-3 bg-muted/20"
-                        >
-                          <p className="font-medium">{contributor.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Phone: {contributor.phone}
+                    {job.selectedWorker &&
+                      (isCreator || isContributor || isAdmin) && (
+                        <div className="border rounded p-3 bg-muted/20">
+                          <p className="font-semibold mb-1">Selected Worker</p>
+                          <p className="text-sm font-medium">
+                            {job.selectedWorker.name}
                           </p>
-                          <p className="text-xs text-muted-foreground capitalize">
-                            Role:{" "}
-                            {String(
-                              contributor.role || "contributor",
-                            ).toLowerCase()}
+                          <p className="text-xs text-muted-foreground">
+                            Phone: {job.selectedWorker.phone}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Availability:{" "}
+                            {job.selectedWorker.availability || "Not specified"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Skills:{" "}
+                            {Array.isArray(job.selectedWorker.skillTags) &&
+                            job.selectedWorker.skillTags.length > 0
+                              ? job.selectedWorker.skillTags.join(", ")
+                              : "Not specified"}
                           </p>
                         </div>
-                      ),
+                      )}
+
+                    {canViewApplications && (
+                      <>
+                        <p className="text-sm font-medium">
+                          All Worker Applications
+                        </p>
+                        {applications.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No applications yet.
+                          </p>
+                        ) : (
+                          applications.map((app: any) => (
+                            <div
+                              key={app.id}
+                              className="border rounded p-3 flex items-center justify-between"
+                            >
+                              <div>
+                                <p className="font-medium">
+                                  {app.worker?.name ||
+                                    `Worker #${app.workerId}`}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  Bid: ₹{app.bidAmount}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Phone: {app.worker?.phone || "N/A"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Availability:{" "}
+                                  {app.worker?.availability || "Not specified"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Skills:{" "}
+                                  {Array.isArray(app.worker?.skillTags) &&
+                                  app.worker.skillTags.length > 0
+                                    ? app.worker.skillTags.join(", ")
+                                    : "Not specified"}
+                                </p>
+                              </div>
+                              {canManageWorkerSelection ? (
+                                <Button
+                                  size="sm"
+                                  disabled={
+                                    acceptMutation.isPending ||
+                                    (Boolean(job.selectedWorkerId) && !isAdmin)
+                                  }
+                                  onClick={() => acceptMutation.mutate(app.id)}
+                                >
+                                  {isAdmin &&
+                                  job.selectedWorkerId &&
+                                  job.selectedWorkerId !== app.workerId
+                                    ? "Reassign"
+                                    : "Select"}
+                                </Button>
+                              ) : (
+                                <Badge variant="outline">Readonly</Badge>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </>
                     )}
+                  </CardContent>
+                </Card>
+              )}
+
+            {/* Task #4: Removed inline Contributor Profiles card - now shown in modal */}
+
+            {/* Ledger Summary - moved to left side, outside of Leader Execution Expenses */}
+            {job.executionMode === "LEADER_EXECUTION" &&
+              (isCreator || isAdmin || isContributor) &&
+              ledger && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Ledger Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm">
+                      Raised: ₹{ledger.totalRaised} | Spent: ₹
+                      {ledger.totalSpent} | Remaining: ₹
+                      {ledger.remainingBalance}
+                    </p>
+                    <div className="space-y-2 max-h-40 overflow-auto">
+                      {Array.isArray(ledger.transactions) &&
+                      ledger.transactions.length > 0 ? (
+                        ledger.transactions.map((tx: any) => (
+                          <div
+                            key={tx.id}
+                            className="rounded border p-2 text-xs flex items-center justify-between gap-2"
+                          >
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              {tx.proofUrl && (
+                                <a
+                                  href={tx.proofUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="w-8 h-8 flex-shrink-0"
+                                >
+                                  <img
+                                    src={tx.proofUrl}
+                                    alt="Proof"
+                                    className="w-8 h-8 object-cover rounded border"
+                                  />
+                                </a>
+                              )}
+                              <p className="text-muted-foreground truncate">
+                                {tx.description}
+                              </p>
+                            </div>
+                            <p className="font-medium flex-shrink-0">
+                              ₹{tx.amount}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          No expenses added yet.
+                        </p>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               )}
@@ -1181,10 +1305,15 @@ export default function JobDetailsPage() {
                     ₹{job.collectedAmount || 0} / ₹{job.targetAmount}
                   </p>
                   <Progress value={fundingPercent} className="h-2" />
-                  <p className="text-xs text-muted-foreground">
-                    Contributors:{" "}
-                    {job.contributorCount ?? job.contributions?.length ?? 0}
-                  </p>
+                  {/* Task #4: Clickable contributor count that opens modal */}
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-primary underline cursor-pointer bg-transparent border-none p-0"
+                    onClick={() => setShowContributorsModal(true)}
+                    disabled={contributorCount === 0}
+                  >
+                    Contributors: {contributorCount}
+                  </button>
                   {canContribute && (
                     <div className="space-y-2">
                       <Input
@@ -1202,7 +1331,7 @@ export default function JobDetailsPage() {
                           })
                         }
                       >
-                        Razorpay: Contribute
+                        Contribute
                       </Button>
                     </div>
                   )}
@@ -1210,19 +1339,73 @@ export default function JobDetailsPage() {
               </Card>
             )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Worker Progress</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Progress value={workerProgress} className="h-2" />
-                <p className="text-xs text-muted-foreground">
-                  Current state: {job.status}
-                </p>
-              </CardContent>
-            </Card>
+            {canAddExpenses && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Leader Execution Expenses</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Add expense entries while executing this job. Expenses are
+                    append-only and tracked publicly in the ledger.
+                  </p>
 
-            {isWorker && (
+                  <div className="grid grid-cols-1 gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Expense amount"
+                      value={expenseAmount}
+                      onChange={(e) => setExpenseAmount(e.target.value)}
+                    />
+                    <Textarea
+                      placeholder="Expense description"
+                      value={expenseDescription}
+                      onChange={(e) => setExpenseDescription(e.target.value)}
+                    />
+                    <Input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={(e) =>
+                        setExpenseProofFile(e.target.files?.[0] ?? null)
+                      }
+                    />
+                    <Button
+                      disabled={
+                        createExpenseMutation.isPending ||
+                        isUploadingExpenseProof ||
+                        !expenseAmount ||
+                        !expenseDescription ||
+                        !expenseProofFile
+                      }
+                      onClick={async () => {
+                        if (!expenseProofFile) return;
+                        setIsUploadingExpenseProof(true);
+                        try {
+                          const proofAsset =
+                            await uploadToCloudinary(expenseProofFile);
+                          createExpenseMutation.mutate({
+                            amount: Number(expenseAmount),
+                            description: expenseDescription,
+                            proofUrl: proofAsset.url,
+                          });
+                        } finally {
+                          setIsUploadingExpenseProof(false);
+                        }
+                      }}
+                    >
+                      {createExpenseMutation.isPending ||
+                      isUploadingExpenseProof
+                        ? "Adding..."
+                        : "Add Expense Entry"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Task #5: Removed Worker Progress Card - now shown in job state header */}
+
+            {isWorker && job.executionMode === "WORKER_EXECUTION" && (
               <Card>
                 <CardHeader>
                   <CardTitle>Worker Actions</CardTitle>
@@ -1249,7 +1432,10 @@ export default function JobDetailsPage() {
                         <Button
                           disabled={isApplying || !bidAmount}
                           onClick={() =>
-                            apply({ jobId: id, bidAmount: Number(bidAmount) })
+                            apply({
+                              jobId: id,
+                              bidAmount: Number(bidAmount),
+                            })
                           }
                         >
                           Apply for Job
@@ -1646,6 +1832,195 @@ export default function JobDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Task #4: Contributor Profiles Modal */}
+      <Dialog
+        open={showContributorsModal}
+        onOpenChange={setShowContributorsModal}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {canViewRefund && isCreator
+                ? "Refund Details"
+                : "Contributor Profiles"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-96 overflow-auto">
+            {/* Show refund calculation for contributors when job is under review or completed */}
+            {canViewRefund && contributorProfiles.length > 0 ? (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                <p className="text-sm font-semibold text-blue-800">
+                  Refund Calculation
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  Total Raised: ₹{ledger?.totalRaised || 0} | Spent: ₹
+                  {ledger?.totalSpent || 0} | Remaining: ₹
+                  {ledger?.remainingBalance || 0}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Calculation: (Remaining ÷ Total Raised) × Your Contribution =
+                  Your Refund
+                </p>
+              </div>
+            ) : null}
+
+            {/* Show contributor profiles with refund calculation when job is under review or completed */}
+            {canViewRefund && contributorProfiles.length > 0 ? (
+              contributorProfiles.map((contributor: any) => {
+                const totalRaised = ledger?.totalRaised || 0;
+                const remainingBalance = ledger?.remainingBalance || 0;
+                const refundRatio =
+                  totalRaised > 0 ? remainingBalance / totalRaised : 0;
+                const estimatedRefund =
+                  contributor.contributionAmount * refundRatio;
+                const isMyContribution = user?.id === contributor.id;
+                return (
+                  <div
+                    key={contributor.id}
+                    className={`border rounded p-3 ${isMyContribution ? "bg-green-50 border-green-300" : "bg-muted/20"}`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium">
+                          {contributor.name}
+                          {isMyContribution && (
+                            <span className="text-xs text-green-600 ml-1">
+                              (You)
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Contributed: ₹{contributor.contributionAmount}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-green-700">
+                          ~₹{estimatedRefund.toFixed(2)} refund
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : contributorProfiles.length > 0 ? (
+              contributorProfiles.map((contributor: any) => (
+                <div
+                  key={contributor.id}
+                  className="border rounded p-3 bg-muted/20"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium">{contributor.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Phone: {contributor.phone}
+                      </p>
+                      <p className="text-xs text-muted-foreground capitalize">
+                        Role:{" "}
+                        {String(
+                          contributor.role || "contributor",
+                        ).toLowerCase()}
+                      </p>
+                    </div>
+                    {contributor.contributionAmount > 0 && (
+                      <div className="text-right">
+                        <p className="text-sm font-semibold">
+                          ₹{contributor.contributionAmount}
+                        </p>
+                        {contributor.contributionDate && (
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(
+                              contributor.contributionDate,
+                            ).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No contributors yet.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Job Modal */}
+      <Dialog open={showEditJobModal} onOpenChange={setShowEditJobModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Job</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Title</label>
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Title"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Description</label>
+              <Textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Description"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Location</label>
+              <Input
+                value={editLocation}
+                onChange={(e) => setEditLocation(e.target.value)}
+                placeholder="Location"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Target Amount</label>
+              <Input
+                type="number"
+                value={editTargetAmount}
+                onChange={(e) => setEditTargetAmount(e.target.value)}
+                placeholder="Target amount"
+              />
+            </div>
+            <div className="flex items-center justify-between rounded border p-3">
+              <span className="text-sm">Private residential property</span>
+              <Switch
+                checked={editPrivateProperty}
+                onCheckedChange={setEditPrivateProperty}
+              />
+            </div>
+            <Button
+              className="w-full"
+              disabled={isUpdatingJob}
+              onClick={() => {
+                updateJob(
+                  {
+                    id,
+                    title: editTitle,
+                    description: editDescription,
+                    location: editLocation,
+                    targetAmount: Number(editTargetAmount),
+                    isPrivateResidentialProperty: editPrivateProperty,
+                  },
+                  {
+                    onSuccess: () => {
+                      setShowEditJobModal(false);
+                    },
+                  },
+                );
+              }}
+            >
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

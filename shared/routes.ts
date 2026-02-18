@@ -21,9 +21,16 @@ const createJobInput = z.object({
   title: z.string().min(1),
   description: z.string().min(1),
   location: z.string().min(1),
-  targetAmount: z.number().positive().max(10000),
+  targetAmount: z.number().positive(),
   isPrivateResidentialProperty: z.boolean(),
+  executionMode: z.enum(["WORKER_EXECUTION", "LEADER_EXECUTION"]),
   imageUrl: z.string().url().optional(),
+});
+
+const createExpenseInput = z.object({
+  amount: z.number().positive(),
+  description: z.string().min(1),
+  proofUrl: z.string().url(),
 });
 
 const createContributionInput = z.object({
@@ -158,7 +165,7 @@ export const api = {
           title: z.string().min(1).optional(),
           description: z.string().min(1).optional(),
           location: z.string().min(1).optional(),
-          targetAmount: z.number().positive().max(10000).optional(),
+          targetAmount: z.number().positive().optional(),
           isPrivateResidentialProperty: z.boolean().optional(),
           status: z
             .enum([
@@ -173,11 +180,54 @@ export const api = {
               "CANCELLED",
             ])
             .optional(),
+          executionMode: z
+            .enum(["WORKER_EXECUTION", "LEADER_EXECUTION"])
+            .optional(),
           selectedWorkerId: z.number().optional(),
           workerSubmissionMessage: z.string().max(2000).optional(),
         })
         .strict(),
       responses: { 200: z.custom<typeof jobs.$inferSelect>() },
+    },
+    createExpense: {
+      method: "POST" as const,
+      path: "/api/jobs/:id/expenses" as const,
+      input: createExpenseInput,
+      responses: {
+        201: z.object({
+          id: z.number(),
+          jobId: z.number(),
+          leaderId: z.number(),
+          amount: z.number(),
+          description: z.string(),
+          proofUrl: z.string(),
+          createdAt: z.any(),
+        }),
+      },
+    },
+    ledger: {
+      method: "GET" as const,
+      path: "/api/jobs/:id/ledger" as const,
+      responses: {
+        200: z.object({
+          totalRaised: z.number(),
+          totalSpent: z.number(),
+          remainingBalance: z.number(),
+          platformFeePercent: z.number(),
+          platformFeeAmount: z.number(),
+          transactions: z.array(
+            z.object({
+              id: z.number(),
+              jobId: z.number(),
+              leaderId: z.number(),
+              amount: z.number(),
+              description: z.string(),
+              proofUrl: z.string(),
+              createdAt: z.any(),
+            }),
+          ),
+        }),
+      },
     },
   },
   contributions: {

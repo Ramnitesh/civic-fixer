@@ -6,6 +6,7 @@ import {
   workerApplications,
   jobProofs,
   disputes,
+  jobExpenseTransactions,
   type User,
   type InsertUser,
   type Job,
@@ -18,6 +19,8 @@ import {
   type InsertJobProof,
   type Dispute,
   type InsertDispute,
+  type JobExpenseTransaction,
+  type InsertJobExpenseTransaction,
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 
@@ -128,6 +131,12 @@ export interface IStorage {
   setDisputeDetails(disputeId: number, details: DisputeDetails): Promise<void>;
   getDisputeDetails(disputeId: number): Promise<DisputeDetails | undefined>;
   markContributionsRefunded(jobId: number): Promise<void>;
+
+  // Leader execution expenses / ledger
+  createJobExpenseTransaction(
+    expense: InsertJobExpenseTransaction,
+  ): Promise<JobExpenseTransaction>;
+  getJobExpenseTransactions(jobId: number): Promise<JobExpenseTransaction[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -476,6 +485,26 @@ export class DatabaseStorage implements IStorage {
       .update(contributions)
       .set({ paymentStatus: "FAILED" })
       .where(eq(contributions.jobId, jobId));
+  }
+
+  async createJobExpenseTransaction(
+    expense: InsertJobExpenseTransaction,
+  ): Promise<JobExpenseTransaction> {
+    const [result] = await db
+      .insert(jobExpenseTransactions)
+      .values(expense)
+      .returning();
+    return result;
+  }
+
+  async getJobExpenseTransactions(
+    jobId: number,
+  ): Promise<JobExpenseTransaction[]> {
+    return await db
+      .select()
+      .from(jobExpenseTransactions)
+      .where(eq(jobExpenseTransactions.jobId, jobId))
+      .orderBy(desc(jobExpenseTransactions.createdAt));
   }
 }
 

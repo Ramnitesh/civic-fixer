@@ -3,11 +3,16 @@ import { api, buildUrl } from "@shared/routes";
 import type { Job } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
-export function useJobs(filters?: { status?: string; leaderId?: string }) {
+export function useJobs(filters?: {
+  status?: string;
+  leaderId?: string;
+  contributorId?: string;
+}) {
   const queryKey = [
     api.jobs.list.path,
     filters?.status,
     filters?.leaderId,
+    filters?.contributorId,
   ].filter(Boolean);
 
   return useQuery({
@@ -48,6 +53,7 @@ export function useCreateJob() {
       location: string;
       targetAmount: number;
       isPrivateResidentialProperty: boolean;
+      executionMode: "WORKER_EXECUTION" | "LEADER_EXECUTION";
       imageUrl?: string;
     }) => {
       const res = await fetch(api.jobs.create.path, {
