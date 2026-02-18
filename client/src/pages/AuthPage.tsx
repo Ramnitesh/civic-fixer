@@ -22,7 +22,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 
@@ -46,12 +52,12 @@ export default function AuthPage() {
 
   const registerForm = useForm<z.infer<typeof insertUserSchema>>({
     resolver: zodResolver(insertUserSchema),
-    defaultValues: { 
-      username: "", 
-      password: "", 
-      name: "", 
+    defaultValues: {
+      username: "",
+      password: "",
+      name: "",
       phone: "",
-      role: "CONTRIBUTOR" 
+      role: "MEMBER",
     },
   });
 
@@ -59,8 +65,12 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-md border-border/50 shadow-xl">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-display font-bold text-primary">CrowdCivicFix</CardTitle>
-          <CardDescription>Join the movement to improve your community</CardDescription>
+          <CardTitle className="text-2xl font-display font-bold text-primary">
+            CrowdCivicFix
+          </CardTitle>
+          <CardDescription>
+            Join the movement to improve your community
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
@@ -68,10 +78,13 @@ export default function AuthPage() {
               <TabsTrigger value="login">Login</TabsTrigger>
               <TabsTrigger value="register">Register</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="login">
               <Form {...loginForm}>
-                <form onSubmit={loginForm.handleSubmit((data) => login(data))} className="space-y-4">
+                <form
+                  onSubmit={loginForm.handleSubmit((data) => login(data))}
+                  className="space-y-4"
+                >
                   <FormField
                     control={loginForm.control}
                     name="username"
@@ -92,14 +105,24 @@ export default function AuthPage() {
                       <FormItem>
                         <FormLabel>Password</FormLabel>
                         <FormControl>
-                          <Input type="password" placeholder="••••••••" {...field} />
+                          <Input
+                            type="password"
+                            placeholder="••••••••"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" className="w-full btn-primary" disabled={isLoggingIn}>
-                    {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  <Button
+                    type="submit"
+                    className="w-full btn-primary"
+                    disabled={isLoggingIn}
+                  >
+                    {isLoggingIn ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : null}
                     Sign In
                   </Button>
                 </form>
@@ -108,7 +131,10 @@ export default function AuthPage() {
 
             <TabsContent value="register">
               <Form {...registerForm}>
-                <form onSubmit={registerForm.handleSubmit((data) => register(data))} className="space-y-4">
+                <form
+                  onSubmit={registerForm.handleSubmit((data) => register(data))}
+                  className="space-y-4"
+                >
                   <FormField
                     control={registerForm.control}
                     name="name"
@@ -154,16 +180,22 @@ export default function AuthPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>I want to be a...</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a role" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="LEADER">Leader (Organize Jobs)</SelectItem>
-                            <SelectItem value="CONTRIBUTOR">Contributor (Fund Jobs)</SelectItem>
-                            <SelectItem value="WORKER">Worker (Do Jobs)</SelectItem>
+                            <SelectItem value="MEMBER">
+                              Member (Fund & Organize Jobs)
+                            </SelectItem>
+                            <SelectItem value="WORKER">
+                              Worker (Do Jobs)
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -183,8 +215,14 @@ export default function AuthPage() {
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" className="w-full btn-primary" disabled={isRegistering}>
-                    {isRegistering ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  <Button
+                    type="submit"
+                    className="w-full btn-primary"
+                    disabled={isRegistering}
+                  >
+                    {isRegistering ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : null}
                     Create Account
                   </Button>
                 </form>

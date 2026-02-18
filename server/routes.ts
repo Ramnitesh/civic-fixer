@@ -387,10 +387,10 @@ export async function registerRoutes(
 
   app.post(api.jobs.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    if (!["LEADER", "CONTRIBUTOR", "ADMIN"].includes(req.user!.role)) {
-      return res
-        .status(403)
-        .json({ message: "Only leaders/contributors can create jobs" });
+    if (
+      !["MEMBER", "LEADER", "CONTRIBUTOR", "ADMIN"].includes(req.user!.role)
+    ) {
+      return res.status(403).json({ message: "Only members can create jobs" });
     }
 
     const input = api.jobs.create.input.parse(req.body);
@@ -700,10 +700,10 @@ export async function registerRoutes(
 
   app.post(api.contributions.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    if (!["LEADER", "CONTRIBUTOR", "ADMIN"].includes(req.user!.role)) {
-      return res
-        .status(403)
-        .json({ message: "Only leaders and contributors can contribute" });
+    if (
+      !["MEMBER", "LEADER", "CONTRIBUTOR", "ADMIN"].includes(req.user!.role)
+    ) {
+      return res.status(403).json({ message: "Only members can contribute" });
     }
 
     const input = api.contributions.create.input.parse(req.body);
@@ -1000,10 +1000,12 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Review window has ended" });
     }
 
-    if (req.user!.role !== "CONTRIBUTOR") {
+    if (
+      !["MEMBER", "LEADER", "CONTRIBUTOR", "ADMIN"].includes(req.user!.role)
+    ) {
       return res
         .status(403)
-        .json({ message: "Only contributors can raise disputes" });
+        .json({ message: "Only members can raise disputes" });
     }
 
     const contribution = await storage.getContributionByJobAndUser(

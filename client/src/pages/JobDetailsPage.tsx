@@ -7,7 +7,7 @@ import { useApplications, useApplyForJob } from "@/hooks/use-applications";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { formatDistanceStrict } from "date-fns";
 import {
   Loader2,
@@ -80,6 +80,7 @@ export default function JobDetailsPage() {
   const [expenseDescription, setExpenseDescription] = useState("");
   const [expenseProofFile, setExpenseProofFile] = useState<File | null>(null);
   const [isUploadingExpenseProof, setIsUploadingExpenseProof] = useState(false);
+  const expenseFileInputRef = useRef<HTMLInputElement>(null);
 
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -401,6 +402,9 @@ export default function JobDetailsPage() {
       setExpenseAmount("");
       setExpenseDescription("");
       setExpenseProofFile(null);
+      if (expenseFileInputRef.current) {
+        expenseFileInputRef.current.value = "";
+      }
       toast({
         title: "Expense added",
         description: "Expense entry has been saved to the ledger.",
@@ -479,12 +483,15 @@ export default function JobDetailsPage() {
   };
 
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+  const shareText = `Help fund this cleanup job: ${job?.title || ""}`;
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(
-    `Help fund this cleanup job: ${shareUrl}`,
+    `${shareText} ${shareUrl}`,
   )}`;
   const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
-    `Support this cleanup job: ${shareUrl}`,
+    `${shareText} ${shareUrl}`,
   )}`;
+  const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+  const linkedinUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
 
   const proofMedia = [
     {
@@ -714,6 +721,7 @@ export default function JobDetailsPage() {
   const isAdmin = user?.role === "ADMIN";
   const isWorker = user?.role === "WORKER";
   const isContributor = user?.role === "CONTRIBUTOR";
+  const isMember = user?.role === "MEMBER";
   const isSelectedWorker = Boolean(
     user?.id && user.id === job.selectedWorkerId,
   );
@@ -722,7 +730,7 @@ export default function JobDetailsPage() {
   const canViewApplications = isCreator || isAdmin || isContributor;
   const canContribute =
     user &&
-    ["LEADER", "CONTRIBUTOR", "ADMIN"].includes(user.role) &&
+    ["MEMBER", "LEADER", "CONTRIBUTOR", "ADMIN"].includes(user.role) &&
     !job.selectedWorkerId &&
     ![
       "AWAITING_VERIFICATION",
@@ -836,6 +844,10 @@ export default function JobDetailsPage() {
                 {job.createdAt
                   ? new Date(job.createdAt).toLocaleDateString()
                   : ""}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                Owened By:{" "}
+                {(job as any)?.leader?.name || `Leader #${job.leaderId}`}
               </span>
             </div>
             {/* Task #5: Progress bar in job state header */}
@@ -1239,7 +1251,10 @@ export default function JobDetailsPage() {
 
             {/* Ledger Summary - moved to left side, outside of Leader Execution Expenses */}
             {job.executionMode === "LEADER_EXECUTION" &&
-              (isCreator || isAdmin || isContributor) &&
+              (isCreator ||
+                isAdmin ||
+                isContributor ||
+                (isMember && hasContributed)) &&
               ledger && (
                 <Card>
                   <CardHeader>
@@ -1363,6 +1378,7 @@ export default function JobDetailsPage() {
                       onChange={(e) => setExpenseDescription(e.target.value)}
                     />
                     <Input
+                      ref={expenseFileInputRef}
                       type="file"
                       accept="image/*,application/pdf"
                       onChange={(e) =>
@@ -1618,7 +1634,7 @@ export default function JobDetailsPage() {
 
             {job.status === "UNDER_REVIEW" &&
               !!user &&
-              user.role === "CONTRIBUTOR" &&
+              ["MEMBER", "CONTRIBUTOR"].includes(user.role) &&
               hasContributed &&
               !myRaisedDispute && (
                 <Card>
@@ -1804,24 +1820,12 @@ export default function JobDetailsPage() {
             )}
 
             {!isWorker && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Share Job</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <a href={whatsappUrl} target="_blank" rel="noreferrer">
-                    <Button className="w-full" variant="outline">
-                      <Share2 className="w-4 h-4 mr-2" />
-                      Share on WhatsApp
-                    </Button>
-                  </a>
-                  <a href={xShareUrl} target="_blank" rel="noreferrer">
-                    <Button className="w-full" variant="outline">
-                      Share on Social
-                    </Button>
-                  </a>
-                </CardContent>
-              </Card>
+              <a href={whatsappUrl} target="_blank" rel="noreferrer">
+                <Button className="w-full" variant="outline">
+                  <Share2 className="w-4 h-4 mr-2" />
+                  Share Job
+                </Button>
+              </a>
             )}
 
             {!user && (
@@ -1912,15 +1916,11 @@ export default function JobDetailsPage() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-medium">{contributor.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Phone: {contributor.phone}
-                      </p>
-                      <p className="text-xs text-muted-foreground capitalize">
-                        Role:{" "}
-                        {String(
-                          contributor.role || "contributor",
-                        ).toLowerCase()}
-                      </p>
+                      {contributor.phone && (
+                        <p className="text-xs text-muted-foreground">
+                          Phone: {contributor.phone}
+                        </p>
+                      )}
                     </div>
                     {contributor.contributionAmount > 0 && (
                       <div className="text-right">

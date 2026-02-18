@@ -29,6 +29,7 @@ export function Navigation() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [username, setUsername] = useState("");
   const [availability, setAvailability] = useState("");
   const [skillTags, setSkillTags] = useState("");
 
@@ -36,6 +37,7 @@ export function Navigation() {
     if (!user) return;
     setName(user.name ?? "");
     setPhone(user.phone ?? "");
+    setUsername(user.username ?? "");
     setAvailability(user.availability ?? "");
     setSkillTags(
       Array.isArray(user.skillTags) ? user.skillTags.join(", ") : "",
@@ -143,6 +145,12 @@ export function Navigation() {
                     </DialogHeader>
                     <div className="space-y-3">
                       <Input
+                        placeholder="Username"
+                        value={username}
+                        disabled
+                        className="bg-muted"
+                      />
+                      <Input
                         placeholder="Name"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
@@ -152,16 +160,20 @@ export function Navigation() {
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                       />
-                      <Input
-                        placeholder="Availability"
-                        value={availability}
-                        onChange={(e) => setAvailability(e.target.value)}
-                      />
-                      <Input
-                        placeholder="Skills (comma separated)"
-                        value={skillTags}
-                        onChange={(e) => setSkillTags(e.target.value)}
-                      />
+                      {user?.role === "WORKER" && (
+                        <>
+                          <Input
+                            placeholder="Availability"
+                            value={availability}
+                            onChange={(e) => setAvailability(e.target.value)}
+                          />
+                          <Input
+                            placeholder="Skills (comma separated)"
+                            value={skillTags}
+                            onChange={(e) => setSkillTags(e.target.value)}
+                          />
+                        </>
+                      )}
                       <Button
                         className="w-full"
                         disabled={isUpdatingProfile}
@@ -170,11 +182,13 @@ export function Navigation() {
                             {
                               name: name.trim() || undefined,
                               phone: phone.trim() || undefined,
-                              availability: availability.trim() || undefined,
-                              skillTags: skillTags
-                                .split(",")
-                                .map((skill) => skill.trim())
-                                .filter(Boolean),
+                              ...(user?.role === "WORKER" && {
+                                availability: availability.trim() || undefined,
+                                skillTags: skillTags
+                                  .split(",")
+                                  .map((skill) => skill.trim())
+                                  .filter(Boolean),
+                              }),
                             },
                             {
                               onSuccess: () => setIsProfileOpen(false),
@@ -210,7 +224,25 @@ export function Navigation() {
         </div>
 
         {/* Mobile Nav */}
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center gap-2">
+          {/* Wallet Balance - Mobile - Always visible */}
+          {user && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-green-50 rounded-lg border border-green-200">
+              <Wallet className="w-4 h-4 text-green-600" />
+              <span className="text-xs font-semibold text-green-700">
+                ₹{user.totalEarnings || 0}
+              </span>
+            </div>
+          )}
+          {/* Reputation Score - Mobile - Always visible */}
+          {user && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-orange-50 rounded-lg border border-orange-200">
+              <Star className="w-4 h-4 text-orange-500" />
+              <span className="text-xs font-semibold text-orange-700">
+                {user.rating?.toFixed(1) || "5.0"}
+              </span>
+            </div>
+          )}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -218,24 +250,9 @@ export function Navigation() {
               </Button>
             </SheetTrigger>
             <SheetContent>
-              <div className="flex flex-col gap-4 mt-8">
+              <div className="flex flex-col gap-4 mt-4">
                 {user ? (
                   <>
-                    {/* Wallet Balance - Mobile */}
-                    <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-green-50 rounded-lg border border-green-200">
-                      <Wallet className="w-5 h-5 text-green-600" />
-                      <span className="text-sm font-semibold text-green-700">
-                        Wallet: ₹{user.totalEarnings || 0}
-                      </span>
-                    </div>
-                    {/* Reputation Score - Mobile */}
-                    <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-orange-50 rounded-lg border border-orange-200">
-                      <Star className="w-5 h-5 text-orange-500" />
-                      <span className="text-sm font-semibold text-orange-700">
-                        Rating: {user.rating?.toFixed(1) || "5.0"}
-                      </span>
-                    </div>
-
                     <div className="flex items-center gap-3 pb-6 border-b mb-2">
                       <Avatar className="h-10 w-10">
                         <AvatarFallback>
@@ -255,7 +272,9 @@ export function Navigation() {
                     <NavLink href="/jobs" icon={Briefcase}>
                       Browse Jobs
                     </NavLink>
-                    {user.role === "LEADER" && (
+                    {["MEMBER", "LEADER", "CONTRIBUTOR", "ADMIN"].includes(
+                      user.role,
+                    ) && (
                       <NavLink href="/create-job" icon={PlusCircle}>
                         Create Job
                       </NavLink>

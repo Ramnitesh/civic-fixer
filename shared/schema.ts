@@ -20,9 +20,11 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   name: text("name").notNull(),
   phone: text("phone").notNull(),
-  role: text("role", { enum: ["LEADER", "CONTRIBUTOR", "WORKER", "ADMIN"] })
+  role: text("role", {
+    enum: ["MEMBER", "LEADER", "CONTRIBUTOR", "WORKER", "ADMIN"],
+  })
     .notNull()
-    .default("CONTRIBUTOR"),
+    .default("MEMBER"),
   rating: real("rating").default(5.0),
   totalEarnings: real("total_earnings").default(0.0),
   availability: text("availability"),

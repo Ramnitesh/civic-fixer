@@ -7,6 +7,16 @@ type CreateContributionInput = {
   amount: number;
 };
 
+export function useMyContributions() {
+  return useQuery({
+    queryKey: [api.contributions.list.path],
+    queryFn: async () => {
+      const res = await fetch(api.contributions.list.path);
+      if (!res.ok) throw new Error("Failed to fetch contributions");
+      return await res.json();
+    },
+  });
+}
 export function useCreateContribution() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -29,6 +39,9 @@ export function useCreateContribution() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: [api.jobs.get.path, variables.jobId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [api.contributions.list.path],
       });
       toast({
         title: "Contribution Successful",
