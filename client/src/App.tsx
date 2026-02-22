@@ -10,6 +10,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import JobsListPage from "@/pages/JobsListPage";
 import JobDetailsPage from "@/pages/JobDetailsPage";
 import CreateJobPage from "@/pages/CreateJobPage";
+import WalletPage from "@/pages/WalletPage";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 
@@ -40,13 +41,16 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/jobs" component={JobsListPage} />
       <Route path="/jobs/:id" component={JobDetailsPage} />
-      
+
       {/* Protected Routes */}
       <Route path="/dashboard">
         {() => <ProtectedRoute component={DashboardPage} />}
       </Route>
       <Route path="/create-job">
         {() => <ProtectedRoute component={CreateJobPage} />}
+      </Route>
+      <Route path="/wallet">
+        {() => <ProtectedRoute component={WalletPage} />}
       </Route>
 
       <Route component={NotFound} />

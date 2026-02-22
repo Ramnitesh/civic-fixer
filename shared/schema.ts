@@ -132,6 +132,54 @@ export const jobExpenseTransactions = pgTable("job_expense_transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// === WALLET TABLES ===
+
+export const userWallets = pgTable("user_wallets", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().unique(),
+  availableBalance: real("available_balance").notNull().default(0),
+  frozenBalance: real("frozen_balance").notNull().default(0),
+  totalDeposited: real("total_deposited").notNull().default(0),
+  totalSpent: real("total_spent").notNull().default(0),
+  totalRefunded: real("total_refunded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const walletTransactions = pgTable("wallet_transactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  type: text("type", {
+    enum: ["DEPOSIT", "CONTRIBUTION", "REFUND", "WITHDRAWAL", "FEE", "BONUS"],
+  }).notNull(),
+  amount: real("amount").notNull(),
+  status: text("status", {
+    enum: ["PENDING", "SUCCESS", "FAILED", "CANCELLED"],
+  })
+    .notNull()
+    .default("PENDING"),
+  referenceId: text("reference_id"), // Razorpay order/payment ID or job ID
+  description: text("description"),
+  jobId: integer("job_id"), // For contribution/refund related to a job
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const withdrawalRequests = pgTable("withdrawal_requests", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: real("amount").notNull(),
+  status: text("status", {
+    enum: ["PENDING", "APPROVED", "PROCESSING", "PAID", "FAILED", "REJECTED"],
+  })
+    .notNull()
+    .default("PENDING"),
+  bankAccount: text("bank_account").notNull(), // JSON string of bank details
+  razorpayPayoutId: text("razorpay_payout_id"),
+  adminNote: text("admin_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
 // === RELATIONS ===
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -220,6 +268,39 @@ export const jobExpenseTransactionsRelations = relations(
   }),
 );
 
+// Wallet relations
+export const userWalletsRelations = relations(userWallets, ({ one, many }) => ({
+  user: one(users, {
+    fields: [userWallets.userId],
+    references: [users.id],
+  }),
+  transactions: many(walletTransactions),
+}));
+
+export const walletTransactionsRelations = relations(
+  walletTransactions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [walletTransactions.userId],
+      references: [users.id],
+    }),
+    job: one(jobs, {
+      fields: [walletTransactions.jobId],
+      references: [jobs.id],
+    }),
+  }),
+);
+
+export const withdrawalRequestsRelations = relations(
+  withdrawalRequests,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [withdrawalRequests.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
 // === BASE SCHEMAS ===
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -245,7 +326,6 @@ export const insertJobSchema = createInsertSchema(jobs).omit({
 export const insertContributionSchema = createInsertSchema(contributions).omit({
   id: true,
   createdAt: true,
-  paymentStatus: true,
   razorpayOrderId: true,
   razorpayPaymentId: true,
 });
@@ -274,6 +354,29 @@ export const insertJobExpenseTransactionSchema = createInsertSchema(
 ).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertUserWalletSchema = createInsertSchema(userWallets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertWalletTransactionSchema = createInsertSchema(
+  walletTransactions,
+).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWithdrawalRequestSchema = createInsertSchema(
+  withdrawalRequests,
+).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+  status: true,
+  razorpayPayoutId: true,
 });
 
 // === EXPLICIT API CONTRACT TYPES ===
@@ -343,4 +446,47 @@ export type JobResponse = Job & {
 
 export type ApplicationResponse = WorkerApplication & {
   worker?: User;
+};
+
+// Wallet types
+export type UserWallet = typeof userWallets.$inferSelect;
+export type InsertUserWallet = z.infer<typeof insertUserWalletSchema>;
+
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+export type InsertWalletTransaction = z.infer<
+  typeof insertWalletTransactionSchema
+>;
+
+export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
+export type InsertWithdrawalRequest = z.infer<
+  typeof insertWithdrawalRequestSchema
+>;
+
+// Wallet transaction types for API
+export type WalletTransactionType = WalletTransaction["type"];
+export type WalletTransactionStatus = WalletTransaction["status"];
+export type WithdrawalRequestStatus = WithdrawalRequest["status"];
+
+// API Request/Response types
+export type AddMoneyRequest = {
+  amount: number;
+};
+
+export type CreateWithdrawalRequest = {
+  amount: number;
+  bankAccount: {
+    accountNumber: string;
+    ifsc: string;
+    accountHolderName: string;
+  };
+};
+
+export type WalletResponse = {
+  wallet: UserWallet;
+  transactions: WalletTransaction[];
+};
+
+export type ContributionFromWalletRequest = {
+  jobId: number;
+  amount: number;
 };

@@ -7,6 +7,9 @@ import {
   jobProofs,
   disputes,
   jobExpenseTransactions,
+  userWallets,
+  walletTransactions,
+  withdrawalRequests,
   type User,
   type InsertUser,
   type Job,
@@ -21,6 +24,12 @@ import {
   type InsertDispute,
   type JobExpenseTransaction,
   type InsertJobExpenseTransaction,
+  type UserWallet,
+  type InsertUserWallet,
+  type WalletTransaction,
+  type InsertWalletTransaction,
+  type WithdrawalRequest,
+  type InsertWithdrawalRequest,
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 
@@ -137,6 +146,70 @@ export interface IStorage {
     expense: InsertJobExpenseTransaction,
   ): Promise<JobExpenseTransaction>;
   getJobExpenseTransactions(jobId: number): Promise<JobExpenseTransaction[]>;
+
+  // User Wallet
+  getOrCreateWallet(userId: number): Promise<UserWallet>;
+  getWalletByUserId(userId: number): Promise<UserWallet | undefined>;
+  addMoneyToWallet(
+    userId: number,
+    amount: number,
+    referenceId: string,
+  ): Promise<UserWallet>;
+  deductFromWallet(
+    userId: number,
+    amount: number,
+    type: string,
+    referenceId: string,
+    description?: string,
+    jobId?: number,
+  ): Promise<UserWallet>;
+  freezeWalletFunds(userId: number, amount: number): Promise<UserWallet>;
+  addToFrozen(
+    userId: number,
+    amount: number,
+    description: string,
+  ): Promise<UserWallet>;
+  unfreezeWalletFunds(userId: number, amount: number): Promise<UserWallet>;
+  deductFromFrozen(
+    userId: number,
+    amount: number,
+    type: string,
+    referenceId: string,
+    description?: string,
+    jobId?: number,
+  ): Promise<UserWallet>;
+  deductFromFrozenNoTransaction(
+    userId: number,
+    amount: number,
+  ): Promise<UserWallet>;
+  refundToWallet(
+    userId: number,
+    amount: number,
+    jobId: number,
+    description?: string,
+  ): Promise<UserWallet>;
+
+  // Wallet Transactions
+  createWalletTransaction(
+    tx: InsertWalletTransaction,
+  ): Promise<WalletTransaction>;
+  getWalletTransactions(
+    userId: number,
+    limit?: number,
+  ): Promise<WalletTransaction[]>;
+
+  // Withdrawal Requests
+  createWithdrawalRequest(
+    request: InsertWithdrawalRequest,
+  ): Promise<WithdrawalRequest>;
+  getWithdrawalRequests(userId: number): Promise<WithdrawalRequest[]>;
+  getWithdrawalRequestById(id: number): Promise<WithdrawalRequest | undefined>;
+  updateWithdrawalStatus(
+    id: number,
+    status: WithdrawalRequest["status"],
+    razorpayPayoutId?: string,
+    adminNote?: string,
+  ): Promise<WithdrawalRequest>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -505,6 +578,365 @@ export class DatabaseStorage implements IStorage {
       .from(jobExpenseTransactions)
       .where(eq(jobExpenseTransactions.jobId, jobId))
       .orderBy(desc(jobExpenseTransactions.createdAt));
+  }
+
+  // === WALLET METHODS ===
+
+  async getOrCreateWallet(userId: number): Promise<UserWallet> {
+    let [wallet] = await db
+      .select()
+      .from(userWallets)
+      .where(eq(userWallets.userId, userId));
+
+    if (!wallet) {
+      [wallet] = await db.insert(userWallets).values({ userId }).returning();
+    }
+
+    return wallet;
+  }
+
+  async getWalletByUserId(userId: number): Promise<UserWallet | undefined> {
+    const [wallet] = await db
+      .select()
+      .from(userWallets)
+      .where(eq(userWallets.userId, userId));
+    return wallet;
+  }
+
+  async addMoneyToWallet(
+    userId: number,
+    amount: number,
+    referenceId: string,
+  ): Promise<UserWallet> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const roundedAmount = Math.round(amount * 100) / 100;
+
+    const [updated] = await db
+      .update(userWallets)
+      .set({
+        availableBalance: wallet.availableBalance + roundedAmount,
+        totalDeposited: wallet.totalDeposited + roundedAmount,
+        updatedAt: new Date(),
+      })
+      .where(eq(userWallets.userId, userId))
+      .returning();
+
+    // Create transaction record
+    await this.createWalletTransaction({
+      userId,
+      type: "DEPOSIT",
+      amount: roundedAmount,
+      status: "SUCCESS",
+      referenceId,
+      description: "Money added to wallet via Razorpay",
+    });
+
+    return updated;
+  }
+
+  async deductFromWallet(
+    userId: number,
+    amount: number,
+    type: string,
+    referenceId: string,
+    description?: string,
+    jobId?: number,
+  ): Promise<UserWallet> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const roundedAmount = Math.round(amount * 100) / 100;
+
+    if (wallet.availableBalance < roundedAmount) {
+      throw new Error("Insufficient wallet balance");
+    }
+
+    const [updated] = await db
+      .update(userWallets)
+      .set({
+        availableBalance: wallet.availableBalance - roundedAmount,
+        totalSpent: wallet.totalSpent + roundedAmount,
+        updatedAt: new Date(),
+      })
+      .where(eq(userWallets.userId, userId))
+      .returning();
+
+    // Create transaction record
+    await this.createWalletTransaction({
+      userId,
+      type: type as any,
+      amount: roundedAmount,
+      status: "SUCCESS",
+      referenceId,
+      description,
+      jobId,
+    });
+
+    return updated;
+  }
+
+  async freezeWalletFunds(userId: number, amount: number): Promise<UserWallet> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const roundedAmount = Math.round(amount * 100) / 100;
+
+    if (wallet.availableBalance < roundedAmount) {
+      throw new Error("Insufficient available balance to freeze");
+    }
+
+    const [updated] = await db
+      .update(userWallets)
+      .set({
+        availableBalance: wallet.availableBalance - roundedAmount,
+        frozenBalance: wallet.frozenBalance + roundedAmount,
+        updatedAt: new Date(),
+      })
+      .where(eq(userWallets.userId, userId))
+      .returning();
+
+    // Create transaction record for contributed amount
+    await this.createWalletTransaction({
+      userId,
+      type: "FEE",
+      amount: roundedAmount,
+      status: "SUCCESS",
+      referenceId: `contribute-${Date.now()}`,
+      description: `Contributed to job pending completion`,
+    });
+
+    return updated;
+  }
+
+  async addToFrozen(
+    userId: number,
+    amount: number,
+    description: string,
+  ): Promise<UserWallet> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const roundedAmount = Math.round(amount * 100) / 100;
+
+    const [updated] = await db
+      .update(userWallets)
+      .set({
+        frozenBalance: wallet.frozenBalance + roundedAmount,
+        updatedAt: new Date(),
+      })
+      .where(eq(userWallets.userId, userId))
+      .returning();
+
+    // Create transaction record for added frozen amount
+    await this.createWalletTransaction({
+      userId,
+      type: "FEE",
+      amount: roundedAmount,
+      status: "SUCCESS",
+      referenceId: `frozen-${Date.now()}`,
+      description: description,
+    });
+
+    return updated;
+  }
+
+  async unfreezeWalletFunds(
+    userId: number,
+    amount: number,
+  ): Promise<UserWallet> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const roundedAmount = Math.round(amount * 100) / 100;
+
+    if (wallet.frozenBalance < roundedAmount) {
+      throw new Error("Insufficient frozen balance to unfreeze");
+    }
+
+    // Reduce totalSpent when refunding (since this was previously counted as spent)
+    const newTotalSpent = Math.max(0, (wallet.totalSpent || 0) - roundedAmount);
+
+    const [updated] = await db
+      .update(userWallets)
+      .set({
+        availableBalance: wallet.availableBalance + roundedAmount,
+        frozenBalance: wallet.frozenBalance - roundedAmount,
+        totalSpent: newTotalSpent,
+        updatedAt: new Date(),
+      })
+      .where(eq(userWallets.userId, userId))
+      .returning();
+
+    // Create transaction record for unfreeze (when job completes)
+    await this.createWalletTransaction({
+      userId,
+      type: "REFUND",
+      amount: roundedAmount,
+      status: "SUCCESS",
+      referenceId: `unfreeze-${Date.now()}`,
+      description: `Refund - Job completed, unused funds returned`,
+    });
+
+    return updated;
+  }
+
+  async deductFromFrozen(
+    userId: number,
+    amount: number,
+    type: string,
+    referenceId: string,
+    description?: string,
+    jobId?: number,
+  ): Promise<UserWallet> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const roundedAmount = Math.round(amount * 100) / 100;
+
+    if (wallet.frozenBalance < roundedAmount) {
+      throw new Error("Insufficient frozen balance to deduct");
+    }
+
+    const [updated] = await db
+      .update(userWallets)
+      .set({
+        frozenBalance: wallet.frozenBalance - roundedAmount,
+        totalSpent: wallet.totalSpent + roundedAmount,
+        updatedAt: new Date(),
+      })
+      .where(eq(userWallets.userId, userId))
+      .returning();
+
+    // Create transaction record for deducted frozen funds
+    await this.createWalletTransaction({
+      userId,
+      type: type as any,
+      amount: roundedAmount,
+      status: "SUCCESS",
+      referenceId,
+      description,
+      jobId,
+    });
+
+    return updated;
+  }
+
+  async deductFromFrozenNoTransaction(
+    userId: number,
+    amount: number,
+  ): Promise<UserWallet> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const roundedAmount = Math.round(amount * 100) / 100;
+
+    if (wallet.frozenBalance < roundedAmount) {
+      throw new Error("Insufficient frozen balance to deduct");
+    }
+
+    const [updated] = await db
+      .update(userWallets)
+      .set({
+        frozenBalance: wallet.frozenBalance - roundedAmount,
+        updatedAt: new Date(),
+      })
+      .where(eq(userWallets.userId, userId))
+      .returning();
+
+    return updated;
+  }
+
+  async refundToWallet(
+    userId: number,
+    amount: number,
+    jobId: number,
+    description?: string,
+  ): Promise<UserWallet> {
+    const wallet = await this.getOrCreateWallet(userId);
+    const roundedAmount = Math.round(amount * 100) / 100;
+
+    const [updated] = await db
+      .update(userWallets)
+      .set({
+        availableBalance: wallet.availableBalance + roundedAmount,
+        totalRefunded: wallet.totalRefunded + roundedAmount,
+        updatedAt: new Date(),
+      })
+      .where(eq(userWallets.userId, userId))
+      .returning();
+
+    // Create transaction record
+    await this.createWalletTransaction({
+      userId,
+      type: "REFUND",
+      amount: roundedAmount,
+      status: "SUCCESS",
+      referenceId: `job-${jobId}-refund`,
+      description: description || `Refund for job #${jobId}`,
+      jobId,
+    });
+
+    return updated;
+  }
+
+  // Wallet Transactions
+  async createWalletTransaction(
+    tx: InsertWalletTransaction,
+  ): Promise<WalletTransaction> {
+    const [transaction] = await db
+      .insert(walletTransactions)
+      .values(tx)
+      .returning();
+    return transaction;
+  }
+
+  async getWalletTransactions(
+    userId: number,
+    limit: number = 50,
+  ): Promise<WalletTransaction[]> {
+    return await db
+      .select()
+      .from(walletTransactions)
+      .where(eq(walletTransactions.userId, userId))
+      .orderBy(desc(walletTransactions.createdAt))
+      .limit(limit);
+  }
+
+  // Withdrawal Requests
+  async createWithdrawalRequest(
+    request: InsertWithdrawalRequest,
+  ): Promise<WithdrawalRequest> {
+    const [withdrawal] = await db
+      .insert(withdrawalRequests)
+      .values(request)
+      .returning();
+    return withdrawal;
+  }
+
+  async getWithdrawalRequests(userId: number): Promise<WithdrawalRequest[]> {
+    return await db
+      .select()
+      .from(withdrawalRequests)
+      .where(eq(withdrawalRequests.userId, userId))
+      .orderBy(desc(withdrawalRequests.createdAt));
+  }
+
+  async getWithdrawalRequestById(
+    id: number,
+  ): Promise<WithdrawalRequest | undefined> {
+    const [withdrawal] = await db
+      .select()
+      .from(withdrawalRequests)
+      .where(eq(withdrawalRequests.id, id));
+    return withdrawal;
+  }
+
+  async updateWithdrawalStatus(
+    id: number,
+    status: WithdrawalRequest["status"],
+    razorpayPayoutId?: string,
+    adminNote?: string,
+  ): Promise<WithdrawalRequest> {
+    const [updated] = await db
+      .update(withdrawalRequests)
+      .set({
+        status,
+        razorpayPayoutId,
+        adminNote,
+        processedAt:
+          status === "PAID" || status === "FAILED" ? new Date() : undefined,
+      })
+      .where(eq(withdrawalRequests.id, id))
+      .returning();
+    return updated;
   }
 }
 

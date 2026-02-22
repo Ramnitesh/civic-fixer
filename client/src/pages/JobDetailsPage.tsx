@@ -4,6 +4,7 @@ import { useJob, useUpdateJob } from "@/hooks/use-jobs";
 import { useAuth } from "@/hooks/use-auth";
 import { useCreateContribution } from "@/hooks/use-contributions";
 import { useApplications, useApplyForJob } from "@/hooks/use-applications";
+import { useWallet, useWalletBalance } from "@/hooks/use-wallet";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +19,8 @@ import {
   Clock3,
   FileText,
   ArrowLeft,
+  Wallet,
+  Plus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +54,17 @@ export default function JobDetailsPage() {
 
   // Modal state for edit job
   const [showEditJobModal, setShowEditJobModal] = useState(false);
+
+  // Modal state for add money
+  const [showAddMoneyModal, setShowAddMoneyModal] = useState(false);
+
+  // Wallet data
+  const {
+    wallet,
+    addMoney: addMoneyToWallet,
+    isAddingMoney: isAddingMoneyToWallet,
+  } = useWallet();
+  const walletBalance = wallet?.availableBalance ?? 0;
 
   const [contributionAmount, setContributionAmount] = useState("100");
   const [bidAmount, setBidAmount] = useState("");
@@ -1331,23 +1345,55 @@ export default function JobDetailsPage() {
                   </button>
                   {canContribute && (
                     <div className="space-y-2">
+                      {user && (
+                        <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded p-2">
+                          <span className="flex items-center gap-1">
+                            <Wallet className="w-3 h-3" />
+                            Wallet Balance:
+                          </span>
+                          <span className="font-medium">₹{walletBalance}</span>
+                        </div>
+                      )}
                       <Input
                         type="number"
                         value={contributionAmount}
                         onChange={(e) => setContributionAmount(e.target.value)}
                       />
-                      <Button
-                        className="w-full"
-                        disabled={isContributing}
-                        onClick={() =>
-                          contribute({
-                            jobId: id,
-                            amount: Number(contributionAmount),
-                          })
-                        }
-                      >
-                        Contribute
-                      </Button>
+                      {walletBalance < Number(contributionAmount) &&
+                      Number(contributionAmount) > 0 ? (
+                        <>
+                          <Button
+                            className="w-full"
+                            disabled={isAddingMoneyToWallet}
+                            onClick={() => setShowAddMoneyModal(true)}
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Add ₹{Number(contributionAmount) -
+                              walletBalance}{" "}
+                            more
+                          </Button>
+                          <p className="text-xs text-amber-600 text-center">
+                            Insufficient wallet balance
+                          </p>
+                        </>
+                      ) : (
+                        <Button
+                          className="w-full"
+                          disabled={
+                            isContributing ||
+                            !Number(contributionAmount) ||
+                            Number(contributionAmount) <= 0
+                          }
+                          onClick={() =>
+                            contribute({
+                              jobId: id,
+                              amount: Number(contributionAmount),
+                            })
+                          }
+                        >
+                          Contribute ₹{contributionAmount}
+                        </Button>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -2018,6 +2064,59 @@ export default function JobDetailsPage() {
             >
               Save Changes
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Money Modal */}
+      <Dialog open={showAddMoneyModal} onOpenChange={setShowAddMoneyModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Money to Wallet</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+              <p className="text-sm font-medium">Current Balance</p>
+              <p className="text-2xl font-bold">₹{walletBalance}</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Quick Add</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[500, 1000, 2000].map((amount) => (
+                  <Button
+                    key={amount}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      addMoneyToWallet(amount, {
+                        onSuccess: () => {
+                          toast({
+                            title: "Money added",
+                            description: `₹${amount} has been added to your wallet.`,
+                          });
+                          setShowAddMoneyModal(false);
+                        },
+                        onError: (error: Error) => {
+                          toast({
+                            title: "Failed to add money",
+                            description: error.message,
+                            variant: "destructive",
+                          });
+                        },
+                      });
+                    }}
+                    disabled={isAddingMoneyToWallet}
+                  >
+                    ₹{amount}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="text-center text-xs text-muted-foreground">
+              <p>Money will be added instantly to your wallet</p>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

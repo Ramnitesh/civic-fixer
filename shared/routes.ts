@@ -7,6 +7,9 @@ import {
   workerApplications,
   jobProofs,
   disputes,
+  userWallets,
+  walletTransactions,
+  withdrawalRequests,
 } from "./schema";
 
 export const errorSchemas = {
@@ -323,6 +326,61 @@ export const api = {
       method: "GET" as const,
       path: "/api/disputes" as const,
       responses: { 200: z.array(z.custom<typeof disputes.$inferSelect>()) },
+    },
+  },
+  wallet: {
+    getBalance: {
+      method: "GET" as const,
+      path: "/api/wallet" as const,
+      responses: { 200: z.custom<typeof userWallets.$inferSelect>() },
+    },
+    addMoney: {
+      method: "POST" as const,
+      path: "/api/wallet/add-money" as const,
+      input: z.object({ amount: z.number().positive().min(100) }),
+      responses: {
+        200: z.object({
+          orderId: z.string(),
+          amount: z.number(),
+          currency: z.string(),
+        }),
+      },
+    },
+    contribute: {
+      method: "POST" as const,
+      path: "/api/wallet/contribute" as const,
+      input: z.object({
+        jobId: z.number(),
+        amount: z.number().positive(),
+      }),
+      responses: { 200: z.custom<typeof userWallets.$inferSelect>() },
+    },
+    getTransactions: {
+      method: "GET" as const,
+      path: "/api/wallet/transactions" as const,
+      responses: {
+        200: z.array(z.custom<typeof walletTransactions.$inferSelect>()),
+      },
+    },
+    withdraw: {
+      method: "POST" as const,
+      path: "/api/wallet/withdraw" as const,
+      input: z.object({
+        amount: z.number().positive(),
+        bankAccount: z.object({
+          accountNumber: z.string().min(9).max(18),
+          ifsc: z.string().min(11).max(11),
+          accountHolderName: z.string().min(1),
+        }),
+      }),
+      responses: { 201: z.custom<typeof withdrawalRequests.$inferSelect>() },
+    },
+    getWithdrawals: {
+      method: "GET" as const,
+      path: "/api/wallet/withdrawals" as const,
+      responses: {
+        200: z.array(z.custom<typeof withdrawalRequests.$inferSelect>()),
+      },
     },
   },
 };

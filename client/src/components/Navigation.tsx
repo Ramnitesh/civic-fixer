@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useWalletBalance } from "@/hooks/use-wallet";
 import { Button } from "@/components/ui/button";
 import {
   Menu,
@@ -24,6 +25,7 @@ import { Input } from "@/components/ui/input";
 
 export function Navigation() {
   const { user, logout, updateProfile, isUpdatingProfile } = useAuth();
+  const { data: walletBalance } = useWalletBalance();
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -101,12 +103,14 @@ export function Navigation() {
           {user ? (
             <div className="flex items-center gap-4">
               {/* Wallet Balance */}
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200">
-                <Wallet className="w-4 h-4 text-green-600" />
-                <span className="text-sm font-semibold text-green-700">
-                  ₹{user.totalEarnings || 0}
-                </span>
-              </div>
+              <Link href="/wallet">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-lg border border-green-200 cursor-pointer hover:bg-green-100 transition-colors">
+                  <Wallet className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-semibold text-green-700">
+                    ₹{walletBalance ?? 0}
+                  </span>
+                </div>
+              </Link>
               {/* Reputation Score */}
               <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 rounded-lg border border-orange-200">
                 <Star className="w-4 h-4 text-orange-500" />
@@ -227,12 +231,14 @@ export function Navigation() {
         <div className="md:hidden flex items-center gap-2">
           {/* Wallet Balance - Mobile - Always visible */}
           {user && (
-            <div className="flex items-center gap-1 px-2 py-1 bg-green-50 rounded-lg border border-green-200">
-              <Wallet className="w-4 h-4 text-green-600" />
-              <span className="text-xs font-semibold text-green-700">
-                ₹{user.totalEarnings || 0}
-              </span>
-            </div>
+            <Link href="/wallet">
+              <div className="flex items-center gap-1 px-2 py-1 bg-green-50 rounded-lg border border-green-200 cursor-pointer hover:bg-green-100 transition-colors">
+                <Wallet className="w-4 h-4 text-green-600" />
+                <span className="text-xs font-semibold text-green-700">
+                  ₹{user.totalEarnings || 0}
+                </span>
+              </div>
+            </Link>
           )}
           {/* Reputation Score - Mobile - Always visible */}
           {user && (
@@ -271,6 +277,9 @@ export function Navigation() {
                     </NavLink>
                     <NavLink href="/jobs" icon={Briefcase}>
                       Browse Jobs
+                    </NavLink>
+                    <NavLink href="/wallet" icon={Wallet}>
+                      My Wallet
                     </NavLink>
                     {["MEMBER", "LEADER", "CONTRIBUTOR", "ADMIN"].includes(
                       user.role,

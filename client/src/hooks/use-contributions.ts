@@ -17,28 +17,48 @@ export function useMyContributions() {
     },
   });
 }
+
 export function useCreateContribution() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (data: CreateContributionInput) => {
-      const res = await fetch(api.contributions.create.path, {
+      // Use wallet-based contribution
+      const res = await fetch(api.wallet.contribute.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
       if (!res.ok) {
-        const message =
-          (await res.json().catch(() => null))?.message ??
-          "Failed to contribute";
+        const errorData = await res.json().catch(() => null);
+        const message = errorData?.message ?? "Failed to contribute";
+
+        // Check if it's a wallet balance issue
+        if (errorData?.available !== undefined) {
+          throw new Error(
+            `Insufficient wallet balance. Required: ₹${errorData?.required}, Available: ₹${errorData?.available}`,
+          );
+        }
         throw new Error(message);
       }
       return await res.json();
     },
     onSuccess: (_, variables) => {
+      // Invalidate wallet queries to refresh balance
+      queryClient.invalidateQueries({ queryKey: ["wallet"] });
+      queryClient.invalidateQueries({
+        queryKey: [api.wallet.getBalance.path],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [api.wallet.getTransactions.path],
+      });
+      // Invalidate job queries to refresh collected amount
       queryClient.invalidateQueries({
         queryKey: [api.jobs.get.path, variables.jobId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [api.jobs.list.path],
       });
       queryClient.invalidateQueries({
         queryKey: [api.contributions.list.path],
@@ -50,7 +70,7 @@ export function useCreateContribution() {
     },
     onError: (err) => {
       toast({
-        title: "Payment Failed",
+        title: "Contribution Failed",
         description: err.message,
         variant: "destructive",
       });

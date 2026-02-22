@@ -218,9 +218,24 @@ async function finalizeReviewIfEligible(jobId: number) {
         if (contributor) {
           const refundAmount = roundMoney(contribution.amount * refundRatio);
           if (refundAmount > 0) {
-            await storage.updateUser(contributor.id, {
-              totalEarnings: (contributor.totalEarnings || 0) + refundAmount,
-            });
+            // Refund to contributor's frozen balance (not available balance)
+            // This is because the contribution was already deducted when job completed
+            // So we add it back to their frozen balance which will show in their wallet
+            try {
+              await storage.unfreezeWalletFunds(contributor.id, refundAmount);
+              // Create a REFUND transaction record
+              await storage.createWalletTransaction({
+                userId: contributor.id,
+                type: "REFUND",
+                amount: refundAmount,
+                status: "SUCCESS",
+                referenceId: `job-${job.id}-refund`,
+                description: `Refund for job #${job.id} - unused funds`,
+                jobId: job.id,
+              });
+            } catch (err) {
+              console.error(`Error refunding to user ${contributor.id}:`, err);
+            }
             refundDetails.push({
               userId: contributor.id,
               name: contributor.name || "Unknown",
@@ -275,7 +290,7 @@ export async function registerRoutes(
       password: hashedPassword,
       name: "Civic Leader",
       phone: "9876543210",
-      role: "LEADER",
+      role: "MEMBER",
     });
   }
 
@@ -299,7 +314,7 @@ export async function registerRoutes(
       password: hashedPassword,
       name: "Good Citizen",
       phone: "5544332211",
-      role: "CONTRIBUTOR",
+      role: "MEMBER",
     });
   }
 
@@ -583,6 +598,59 @@ export async function registerRoutes(
       const updated = await storage.updateJob(id, {
         status: updates.status as "IN_PROGRESS" | "AWAITING_VERIFICATION",
       });
+
+      // If marking as IN_PROGRESS (leader completed work), deduct frozen funds from contributors
+      if (
+        updates.status === "IN_PROGRESS" &&
+        job.executionMode === "LEADER_EXECUTION"
+      ) {
+        const contributions = await storage.getContributionsByJob(job.id);
+        for (const contribution of contributions) {
+          if (contribution.userId && contribution.amount > 0) {
+            try {
+              // Calculate refund amount (remaining balance after expenses)
+              const transactions = await storage.getJobExpenseTransactions(
+                job.id,
+              );
+              const totalSpent = transactions.reduce(
+                (sum, tx) => sum + (tx.amount || 0),
+                0,
+              );
+              const totalRaised = job.collectedAmount || 0;
+              const remainingBalance = roundMoney(totalRaised - totalSpent);
+              const refundRatio =
+                totalRaised > 0 ? remainingBalance / totalRaised : 0;
+              const refundAmount = roundMoney(
+                contribution.amount * refundRatio,
+              );
+
+              // First add refund amount to frozen (if any remaining)
+              if (refundAmount > 0) {
+                await storage.addToFrozen(
+                  contribution.userId,
+                  refundAmount,
+                  `Refund - Job #${job.id} completed, ${refundAmount} eligible for refund`,
+                );
+              }
+
+              // Then deduct the used portion from frozen (no transaction record)
+              const usedAmount = contribution.amount - refundAmount;
+              if (usedAmount > 0) {
+                await storage.deductFromFrozenNoTransaction(
+                  contribution.userId,
+                  usedAmount,
+                );
+              }
+            } catch (err) {
+              console.error(
+                `Error processing frozen funds for user ${contribution.userId}:`,
+                err,
+              );
+            }
+          }
+        }
+      }
+
       return res.json(updated);
     }
 
@@ -645,7 +713,7 @@ export async function registerRoutes(
 
         const contributions = await storage.getContributionsByJob(job.id);
 
-        // Build refund details for each contributor
+        // Build refund details for each contributor and process wallet transactions
         const refundDetails: Array<{
           userId: number;
           name: string;
@@ -664,6 +732,34 @@ export async function registerRoutes(
                 contribution.amount * refundRatio,
               );
               if (refundAmount > 0) {
+                // Add refund amount to contributor's frozen balance
+                try {
+                  await storage.addToFrozen(
+                    contributor.id,
+                    refundAmount,
+                    `Refund - Job #${job.id} completed, ${refundAmount} eligible for refund`,
+                  );
+                } catch (err) {
+                  console.error(
+                    `Error adding refund to frozen for user ${contributor.id}:`,
+                    err,
+                  );
+                }
+                // Deduct the used portion from frozen balance (no transaction record)
+                const usedAmount = contribution.amount - refundAmount;
+                if (usedAmount > 0) {
+                  try {
+                    await storage.deductFromFrozenNoTransaction(
+                      contribution.userId,
+                      usedAmount,
+                    );
+                  } catch (err) {
+                    console.error(
+                      `Error deducting from frozen for user ${contribution.userId}:`,
+                      err,
+                    );
+                  }
+                }
                 refundDetails.push({
                   userId: contributor.id,
                   name: contributor.name || "Unknown",
@@ -1333,6 +1429,206 @@ export async function registerRoutes(
       platformFeeAmount: job.platformFeeAmount || 0,
       transactions,
     });
+  });
+
+  // =====================
+  // WALLET ROUTES
+  // =====================
+
+  // Get wallet balance
+  app.get(api.wallet.getBalance.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    const wallet = await storage.getOrCreateWallet(req.user!.id);
+    res.json(wallet);
+  });
+
+  // Add money to wallet - create Razorpay order
+  app.post(api.wallet.addMoney.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    const input = api.wallet.addMoney.input.parse(req.body);
+    const amountInPaise = Math.round(input.amount * 100);
+
+    // For demo/testing: immediately credit the wallet
+    // In production, this would be done via webhook after payment verification
+    const mockOrderId = `wallet_order_${Date.now()}_${req.user!.id}`;
+    const mockPaymentId = `pay_${Date.now()}`;
+
+    try {
+      await storage.addMoneyToWallet(req.user!.id, input.amount, mockPaymentId);
+
+      res.json({
+        orderId: mockOrderId,
+        amount: amountInPaise,
+        currency: "INR",
+        status: "credited",
+      });
+    } catch (error) {
+      console.error("Error adding money to wallet:", error);
+      res.status(500).json({ message: "Failed to add money to wallet" });
+    }
+  });
+
+  // Webhook endpoint for Razorpay payment success
+  app.post("/api/webhooks/razorpay", async (req, res) => {
+    const { payment_id, order_id, amount } = req.body;
+
+    // In production, verify webhook signature first
+    // const signature = req.headers['x-razorpay-signature'];
+    // razorpay.webhooks.verify(payload, signature);
+
+    // Extract userId from order_id (format: wallet_order_{timestamp}_{userId})
+    const parts = order_id?.split("_");
+    const userId = parts ? parseInt(parts[parts.length - 1], 10) : null;
+
+    if (!userId) {
+      return res.status(400).json({ message: "Invalid order" });
+    }
+
+    const amountInRupees = amount / 100;
+
+    try {
+      await storage.addMoneyToWallet(userId, amountInRupees, payment_id);
+      res.json({ status: "credited" });
+    } catch (error) {
+      console.error("Error crediting wallet:", error);
+      res.status(500).json({ message: "Failed to credit wallet" });
+    }
+  });
+
+  // Contribute to job from wallet
+  app.post(api.wallet.contribute.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    const input = api.wallet.contribute.input.parse(req.body);
+
+    const job = await storage.getJob(input.jobId);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+
+    if (
+      job.selectedWorkerId ||
+      [
+        "AWAITING_VERIFICATION",
+        "UNDER_REVIEW",
+        "COMPLETED",
+        "DISPUTED",
+        "CANCELLED",
+      ].includes(job.status)
+    ) {
+      return res.status(400).json({
+        message: "Contributions are closed for this job",
+      });
+    }
+
+    // Check wallet balance
+    const wallet = await storage.getOrCreateWallet(req.user!.id);
+    if (wallet.availableBalance < input.amount) {
+      return res.status(400).json({
+        message: "Insufficient wallet balance",
+        required: input.amount,
+        available: wallet.availableBalance,
+      });
+    }
+
+    try {
+      // Freeze funds in wallet (will be deducted when job completes)
+      await storage.freezeWalletFunds(req.user!.id, input.amount);
+
+      // Create contribution record so it shows in contributor list
+      // Note: createContribution already updates job's collectedAmount
+      await storage.createContribution({
+        jobId: input.jobId,
+        userId: req.user!.id,
+        amount: input.amount,
+        paymentStatus: "SUCCESS",
+      });
+
+      // Update job status based on new collected amount
+      const refreshedJob = await storage.getJob(input.jobId);
+      if (refreshedJob) {
+        const feePercent = 0;
+        const feeCalc = computeFeeAndWallet(
+          refreshedJob.collectedAmount || 0,
+          feePercent,
+        );
+
+        const nextStatus =
+          (refreshedJob.collectedAmount || 0) >= refreshedJob.targetAmount
+            ? refreshedJob.executionMode === "LEADER_EXECUTION"
+              ? "IN_PROGRESS"
+              : "FUNDING_COMPLETE"
+            : "FUNDING_OPEN";
+
+        await storage.updateJob(refreshedJob.id, {
+          status: nextStatus,
+          walletBalance: feeCalc.walletBalance,
+        });
+      }
+
+      // Get updated wallet
+      const updatedWallet = await storage.getOrCreateWallet(req.user!.id);
+      res.json(updatedWallet);
+    } catch (error) {
+      console.error("Error contributing from wallet:", error);
+      res.status(500).json({ message: "Failed to contribute" });
+    }
+  });
+
+  // Get wallet transactions
+  app.get(api.wallet.getTransactions.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    const transactions = await storage.getWalletTransactions(req.user!.id);
+    res.json(transactions);
+  });
+
+  // Request withdrawal
+  app.post(api.wallet.withdraw.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    const input = api.wallet.withdraw.input.parse(req.body);
+
+    // Check wallet balance
+    const wallet = await storage.getOrCreateWallet(req.user!.id);
+    if (wallet.availableBalance < input.amount) {
+      return res.status(400).json({
+        message: "Insufficient wallet balance",
+        required: input.amount,
+        available: wallet.availableBalance,
+      });
+    }
+
+    try {
+      // Deduct from wallet
+      await storage.deductFromWallet(
+        req.user!.id,
+        input.amount,
+        "WITHDRAWAL",
+        `withdrawal_${Date.now()}`,
+        "Withdrawal requested to bank account",
+      );
+
+      // Create withdrawal request
+      const withdrawal = await storage.createWithdrawalRequest({
+        userId: req.user!.id,
+        amount: input.amount,
+        bankAccount: JSON.stringify(input.bankAccount),
+      });
+
+      res.status(201).json(withdrawal);
+    } catch (error) {
+      console.error("Error processing withdrawal:", error);
+      res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
+
+  // Get withdrawal history
+  app.get(api.wallet.getWithdrawals.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    const withdrawals = await storage.getWithdrawalRequests(req.user!.id);
+    res.json(withdrawals);
   });
 
   return httpServer;
