@@ -235,7 +235,7 @@ export function Navigation() {
               <div className="flex items-center gap-1 px-2 py-1 bg-green-50 rounded-lg border border-green-200 cursor-pointer hover:bg-green-100 transition-colors">
                 <Wallet className="w-4 h-4 text-green-600" />
                 <span className="text-xs font-semibold text-green-700">
-                  ₹{user.totalEarnings || 0}
+                  ₹{walletBalance ?? 0}
                 </span>
               </div>
             </Link>

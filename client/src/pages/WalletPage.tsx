@@ -228,54 +228,46 @@ export default function WalletPage() {
         </div>
 
         {/* Wallet Balance Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Available Balance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+          <Card className="py-1">
+            <CardTitle className="text-xs font-medium text-muted-foreground px-3">
+              Available
+            </CardTitle>
+            <CardContent className="pt-1 pb-2 px-3">
+              <div className="text-lg font-bold text-green-600">
                 {formatAmount(wallet?.availableBalance || 0)}
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Frozen Balance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
+          <Card className="py-1">
+            <CardTitle className="text-xs font-medium text-muted-foreground px-3">
+              Frozen
+            </CardTitle>
+            <CardContent className="pt-1 pb-2 px-3">
+              <div className="text-lg font-bold text-blue-600">
                 {formatAmount(wallet?.frozenBalance || 0)}
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Deposited
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
+          <Card className="py-1">
+            <CardTitle className="text-xs font-medium text-muted-foreground px-3">
+              Deposited
+            </CardTitle>
+            <CardContent className="pt-1 pb-2 px-3">
+              <div className="text-lg font-bold text-green-600">
                 {formatAmount(wallet?.totalDeposited || 0)}
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Spent
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
+          <Card className="py-1">
+            <CardTitle className="text-xs font-medium text-muted-foreground px-3">
+              Spent
+            </CardTitle>
+            <CardContent className="pt-1 pb-2 px-3">
+              <div className="text-lg font-bold text-red-600">
                 {formatAmount(wallet?.totalSpent || 0)}
               </div>
             </CardContent>
@@ -452,15 +444,6 @@ export default function WalletPage() {
                   </div>
                 ) : (
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="px-1">Type</TableHead>
-                        <TableHead className="px-1">Description</TableHead>
-                        <TableHead className="px-1 flex flex-col items-end">
-                          Amount
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
                     <TableBody>
                       {transactions.map((tx) => (
                         <TableRow key={tx.id} className="h-12">
@@ -506,11 +489,11 @@ export default function WalletPage() {
                           <TableCell className="py-1 px-1">
                             <div className="flex flex-col items-end py-1">
                               <span
-                                className={
+                                className={`whitespace-nowrap ${
                                   tx.type === "DEPOSIT" || tx.type === "REFUND"
                                     ? "text-green-600"
                                     : "text-red-600"
-                                }
+                                }`}
                               >
                                 {(tx.type === "DEPOSIT" || tx.type === "REFUND"
                                   ? "+"
