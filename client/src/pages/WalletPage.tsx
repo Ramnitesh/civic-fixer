@@ -234,7 +234,7 @@ export default function WalletPage() {
               Available
             </CardTitle>
             <CardContent className="pt-1 pb-2 px-3">
-              <div className="text-lg font-bold text-green-600">
+              <div className="text-lg font-bold text-black-600">
                 {formatAmount(wallet?.availableBalance || 0)}
               </div>
             </CardContent>
