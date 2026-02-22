@@ -218,23 +218,20 @@ async function finalizeReviewIfEligible(jobId: number) {
         if (contributor) {
           const refundAmount = roundMoney(contribution.amount * refundRatio);
           if (refundAmount > 0) {
-            // Refund to contributor's frozen balance (not available balance)
-            // This is because the contribution was already deducted when job completed
-            // So we add it back to their frozen balance which will show in their wallet
+            // Add refund amount to contributor's frozen balance
+            // No need to deduct from frozen since frozen was never increased in freezeWalletFunds
             try {
-              await storage.unfreezeWalletFunds(contributor.id, refundAmount);
-              // Create a REFUND transaction record
-              await storage.createWalletTransaction({
-                userId: contributor.id,
-                type: "REFUND",
-                amount: refundAmount,
-                status: "SUCCESS",
-                referenceId: `job-${job.id}-refund`,
-                description: `Refund for job #${job.id} - unused funds`,
-                jobId: job.id,
-              });
+              await storage.addToFrozen(
+                contributor.id,
+                refundAmount,
+                `Refund - Job #${job.id} completed, ${refundAmount} eligible for refund`,
+                "REFUND",
+              );
             } catch (err) {
-              console.error(`Error refunding to user ${contributor.id}:`, err);
+              console.error(
+                `Error adding refund to frozen for user ${contributor.id}:`,
+                err,
+              );
             }
             refundDetails.push({
               userId: contributor.id,
@@ -624,21 +621,14 @@ export async function registerRoutes(
                 contribution.amount * refundRatio,
               );
 
-              // First add refund amount to frozen (if any remaining)
+              // Add refund amount to frozen (if any remaining)
+              // No need to deduct from frozen since frozen was never increased in freezeWalletFunds
               if (refundAmount > 0) {
                 await storage.addToFrozen(
                   contribution.userId,
                   refundAmount,
                   `Refund - Job #${job.id} completed, ${refundAmount} eligible for refund`,
-                );
-              }
-
-              // Then deduct the used portion from frozen (no transaction record)
-              const usedAmount = contribution.amount - refundAmount;
-              if (usedAmount > 0) {
-                await storage.deductFromFrozenNoTransaction(
-                  contribution.userId,
-                  usedAmount,
+                  "REFUND",
                 );
               }
             } catch (err) {
@@ -738,27 +728,13 @@ export async function registerRoutes(
                     contributor.id,
                     refundAmount,
                     `Refund - Job #${job.id} completed, ${refundAmount} eligible for refund`,
+                    "REFUND",
                   );
                 } catch (err) {
                   console.error(
                     `Error adding refund to frozen for user ${contributor.id}:`,
                     err,
                   );
-                }
-                // Deduct the used portion from frozen balance (no transaction record)
-                const usedAmount = contribution.amount - refundAmount;
-                if (usedAmount > 0) {
-                  try {
-                    await storage.deductFromFrozenNoTransaction(
-                      contribution.userId,
-                      usedAmount,
-                    );
-                  } catch (err) {
-                    console.error(
-                      `Error deducting from frozen for user ${contribution.userId}:`,
-                      err,
-                    );
-                  }
                 }
                 refundDetails.push({
                   userId: contributor.id,
@@ -791,6 +767,34 @@ export async function registerRoutes(
     }
 
     const updated = await storage.updateJob(id, jobUpdates);
+
+    // If targetAmount was updated, check if we need to auto-update status
+    // based on collectedAmount vs new targetAmount
+    if (updates.targetAmount && job) {
+      const newTargetAmount = updates.targetAmount;
+      const collectedAmount = job.collectedAmount || 0;
+
+      // Only update status if:
+      // 1. Job is currently in FUNDING_OPEN or FUNDING_COMPLETE status
+      // 2. Collected amount now meets or exceeds the new target
+      // 3. The current status doesn't reflect this
+      const currentStatus = job.status;
+      if (
+        (currentStatus === "FUNDING_OPEN" ||
+          currentStatus === "FUNDING_COMPLETE") &&
+        collectedAmount >= newTargetAmount
+      ) {
+        const newStatus =
+          job.executionMode === "LEADER_EXECUTION"
+            ? "IN_PROGRESS"
+            : "FUNDING_COMPLETE";
+
+        if (currentStatus !== newStatus) {
+          await storage.updateJob(id, { status: newStatus });
+        }
+      }
+    }
+
     res.json(updated);
   });
 
@@ -1533,7 +1537,7 @@ export async function registerRoutes(
 
     try {
       // Freeze funds in wallet (will be deducted when job completes)
-      await storage.freezeWalletFunds(req.user!.id, input.amount);
+      await storage.freezeWalletFunds(req.user!.id, input.amount, input.jobId);
 
       // Create contribution record so it shows in contributor list
       // Note: createContribution already updates job's collectedAmount

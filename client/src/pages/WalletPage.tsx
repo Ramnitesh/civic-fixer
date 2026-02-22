@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useWallet } from "../hooks/use-wallet";
 import { Navigation } from "../components/Navigation";
 import { Button } from "../components/ui/button";
@@ -178,9 +179,9 @@ export default function WalletPage() {
       case "CONTRIBUTION":
         return <ArrowUpRight className="h-4 w-4 text-red-500" />;
       case "REFUND":
-        return <ArrowDownRight className="h-4 w-4 text-blue-500" />;
-      case "FEE":
         return <ArrowDownRight className="h-4 w-4 text-purple-500" />;
+      case "FEE":
+        return <ArrowUpRight className="h-4 w-4 text-red-500" />;
       case "WITHDRAWAL":
         return <ArrowUpRight className="h-4 w-4 text-orange-500" />;
       default:
@@ -470,9 +471,33 @@ export default function WalletPage() {
                           </TableCell>
                           <TableCell className="py-1 px-1">
                             <div className="flex flex-col py-1">
-                              <span className="text-sm">
-                                {tx.description || "-"}
-                              </span>
+                              {(() => {
+                                // Try to get jobId from tx.jobId or extract from description
+                                const jobId =
+                                  tx.jobId ||
+                                  (tx.description
+                                    ? parseInt(
+                                        tx.description.match(
+                                          /Job\s*#(\d+)/,
+                                        )?.[1] || "0",
+                                      )
+                                    : 0);
+                                if (jobId > 0) {
+                                  return (
+                                    <Link
+                                      to={`/jobs/${jobId}`}
+                                      className="text-sm text-blue-600 hover:underline"
+                                    >
+                                      {tx.description || "-"}
+                                    </Link>
+                                  );
+                                }
+                                return (
+                                  <span className="text-sm">
+                                    {tx.description || "-"}
+                                  </span>
+                                );
+                              })()}
                               <span className="text-xs text-muted-foreground">
                                 {formatDate(tx.createdAt)}
                               </span>
@@ -482,16 +507,12 @@ export default function WalletPage() {
                             <div className="flex flex-col items-end py-1">
                               <span
                                 className={
-                                  tx.type === "DEPOSIT" ||
-                                  tx.type === "REFUND" ||
-                                  tx.type === "FEE"
+                                  tx.type === "DEPOSIT" || tx.type === "REFUND"
                                     ? "text-green-600"
                                     : "text-red-600"
                                 }
                               >
-                                {(tx.type === "DEPOSIT" ||
-                                tx.type === "REFUND" ||
-                                tx.type === "FEE"
+                                {(tx.type === "DEPOSIT" || tx.type === "REFUND"
                                   ? "+"
                                   : "-") +
                                   formatAmount(tx.amount).replace(/^[+-]/, "")}

@@ -163,11 +163,16 @@ export interface IStorage {
     description?: string,
     jobId?: number,
   ): Promise<UserWallet>;
-  freezeWalletFunds(userId: number, amount: number): Promise<UserWallet>;
+  freezeWalletFunds(
+    userId: number,
+    amount: number,
+    jobId?: number,
+  ): Promise<UserWallet>;
   addToFrozen(
     userId: number,
     amount: number,
     description: string,
+    type?: string,
   ): Promise<UserWallet>;
   unfreezeWalletFunds(userId: number, amount: number): Promise<UserWallet>;
   deductFromFrozen(
@@ -673,7 +678,11 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async freezeWalletFunds(userId: number, amount: number): Promise<UserWallet> {
+  async freezeWalletFunds(
+    userId: number,
+    amount: number,
+    jobId?: number,
+  ): Promise<UserWallet> {
     const wallet = await this.getOrCreateWallet(userId);
     const roundedAmount = Math.round(amount * 100) / 100;
 
@@ -681,24 +690,27 @@ export class DatabaseStorage implements IStorage {
       throw new Error("Insufficient available balance to freeze");
     }
 
+    // Available: -Amount (deducted), Frozen: no change, Spent: +Amount
     const [updated] = await db
       .update(userWallets)
       .set({
         availableBalance: wallet.availableBalance - roundedAmount,
-        frozenBalance: wallet.frozenBalance + roundedAmount,
+        totalSpent: wallet.totalSpent + roundedAmount,
         updatedAt: new Date(),
       })
       .where(eq(userWallets.userId, userId))
       .returning();
 
     // Create transaction record for contributed amount
+    const jobRef = jobId ? `#${jobId}` : "";
     await this.createWalletTransaction({
       userId,
       type: "FEE",
       amount: roundedAmount,
       status: "SUCCESS",
-      referenceId: `contribute-${Date.now()}`,
-      description: `Contributed to job pending completion`,
+      referenceId: `contribute-${jobId || Date.now()}`,
+      description: `Contributed to job ${jobRef} pending completion`,
+      jobId: jobId,
     });
 
     return updated;
@@ -708,30 +720,41 @@ export class DatabaseStorage implements IStorage {
     userId: number,
     amount: number,
     description: string,
+    type: string = "FEE",
   ): Promise<UserWallet> {
+    // Ensure wallet exists first
     const wallet = await this.getOrCreateWallet(userId);
     const roundedAmount = Math.round(amount * 100) / 100;
 
+    // For REFUND type: decrease totalSpent (refund reduces spent)
+    const updateData: Record<string, unknown> = {
+      frozenBalance: wallet.frozenBalance + roundedAmount,
+      updatedAt: new Date(),
+    };
+
+    if (type === "REFUND") {
+      // Decrease spent when refunding
+      updateData.totalSpent = Math.max(0, wallet.totalSpent - roundedAmount);
+    }
+
     const [updated] = await db
       .update(userWallets)
-      .set({
-        frozenBalance: wallet.frozenBalance + roundedAmount,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(eq(userWallets.userId, userId))
       .returning();
 
     // Create transaction record for added frozen amount
     await this.createWalletTransaction({
       userId,
-      type: "FEE",
+      type: type as any,
       amount: roundedAmount,
       status: "SUCCESS",
       referenceId: `frozen-${Date.now()}`,
       description: description,
     });
 
-    return updated;
+    // Return fresh wallet data
+    return await this.getOrCreateWallet(userId);
   }
 
   async unfreezeWalletFunds(
@@ -745,15 +768,12 @@ export class DatabaseStorage implements IStorage {
       throw new Error("Insufficient frozen balance to unfreeze");
     }
 
-    // Reduce totalSpent when refunding (since this was previously counted as spent)
-    const newTotalSpent = Math.max(0, (wallet.totalSpent || 0) - roundedAmount);
-
+    // Don't change totalSpent - just move from frozen to available
     const [updated] = await db
       .update(userWallets)
       .set({
         availableBalance: wallet.availableBalance + roundedAmount,
         frozenBalance: wallet.frozenBalance - roundedAmount,
-        totalSpent: newTotalSpent,
         updatedAt: new Date(),
       })
       .where(eq(userWallets.userId, userId))
