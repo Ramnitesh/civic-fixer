@@ -218,18 +218,13 @@ async function finalizeReviewIfEligible(jobId: number) {
         if (contributor) {
           const refundAmount = roundMoney(contribution.amount * refundRatio);
           if (refundAmount > 0) {
-            // Add refund amount to contributor's frozen balance
-            // No need to deduct from frozen since frozen was never increased in freezeWalletFunds
+            // Refund was already added to frozen when job was marked UNDER_REVIEW
+            // Now release it to available balance
             try {
-              await storage.addToFrozen(
-                contributor.id,
-                refundAmount,
-                `Refund - Job #${job.id} completed, ${refundAmount} eligible for refund`,
-                "REFUND",
-              );
+              await storage.unfreezeWalletFunds(contributor.id, refundAmount);
             } catch (err) {
               console.error(
-                `Error adding refund to frozen for user ${contributor.id}:`,
+                `Error releasing refund for user ${contributor.id}:`,
                 err,
               );
             }
@@ -345,6 +340,40 @@ export async function registerRoutes(
       await storage.updateJob(existingJob.id, { status: nextStatus });
     }
   }
+
+  // Start background job to auto-complete jobs after review period ends
+  // Runs every hour to check for jobs that have passed their review deadline
+  const AUTO_COMPLETE_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
+  async function checkAndAutoCompleteJobs() {
+    try {
+      const allJobs = await storage.getJobs();
+      const jobsToCheck = allJobs.filter(
+        (job) => job.status === "UNDER_REVIEW" && job.reviewDeadline,
+      );
+
+      for (const job of jobsToCheck) {
+        if (
+          job.reviewDeadline &&
+          new Date(job.reviewDeadline).getTime() < Date.now()
+        ) {
+          console.info(
+            `[auto-complete] Job #${job.id} review period ended, completing job...`,
+          );
+          await finalizeReviewIfEligible(job.id);
+        }
+      }
+    } catch (error) {
+      console.error("[auto-complete] Error checking jobs:", error);
+    }
+  }
+
+  // Run immediately on startup, then every hour
+  checkAndAutoCompleteJobs();
+  setInterval(checkAndAutoCompleteJobs, AUTO_COMPLETE_INTERVAL_MS);
+  console.info(
+    `[auto-complete] Background job started - checking every ${AUTO_COMPLETE_INTERVAL_MS / 1000 / 60} minutes`,
+  );
 
   app.patch(api.auth.updateProfile.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
