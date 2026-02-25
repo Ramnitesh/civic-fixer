@@ -60,7 +60,7 @@ export default function AuthScreen() {
           <View style={styles.content}>
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.title}>CrowdCivicFix</Text>
+              <Text style={styles.title}>Crowd CivicFix</Text>
               <Text style={styles.subtitle}>
                 Join the movement to improve your community
               </Text>

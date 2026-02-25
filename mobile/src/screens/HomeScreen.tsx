@@ -83,7 +83,7 @@ export default function HomeScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>CrowdCivicFix</Text>
+          <Text style={styles.headerTitle}>Crowd Civic Fix</Text>
           <Text style={styles.headerSubtitle}>
             Transform your neighborhood together
           </Text>

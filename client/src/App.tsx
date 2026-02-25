@@ -11,8 +11,14 @@ import JobsListPage from "@/pages/JobsListPage";
 import JobDetailsPage from "@/pages/JobDetailsPage";
 import CreateJobPage from "@/pages/CreateJobPage";
 import WalletPage from "@/pages/WalletPage";
+import LegalPage from "@/pages/legal/LegalPage";
+import AboutPage from "@/pages/AboutPage";
+import ContactPage from "@/pages/ContactPage";
+import HelpPage from "@/pages/HelpPage";
+import CareersPage from "@/pages/CareersPage";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
+import { ScrollToTop } from "@/components/ScrollToTop";
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
   const { user, isLoading } = useAuth();
@@ -53,6 +59,35 @@ function Router() {
         {() => <ProtectedRoute component={WalletPage} />}
       </Route>
 
+      {/* Legal Routes - handles all /legal/* routes */}
+      <Route path="/legal/:slug" component={LegalPage} />
+
+      {/* Company Routes */}
+      <Route path="/about" component={AboutPage} />
+      <Route path="/contact" component={ContactPage} />
+      <Route path="/help" component={HelpPage} />
+      <Route path="/careers" component={CareersPage} />
+      <Route path="/press">
+        {() => (
+          <div className="min-h-screen bg-background">
+            <div className="container mx-auto px-4 py-12 max-w-4xl">
+              <h1 className="text-3xl font-bold mb-6">Press</h1>
+              <p className="text-muted-foreground">Coming soon...</p>
+            </div>
+          </div>
+        )}
+      </Route>
+      <Route path="/blog">
+        {() => (
+          <div className="min-h-screen bg-background">
+            <div className="container mx-auto px-4 py-12 max-w-4xl">
+              <h1 className="text-3xl font-bold mb-6">Blog</h1>
+              <p className="text-muted-foreground">Coming soon...</p>
+            </div>
+          </div>
+        )}
+      </Route>
+
       <Route component={NotFound} />
     </Switch>
   );
@@ -62,6 +97,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <ScrollToTop />
         <Toaster />
         <Router />
       </TooltipProvider>

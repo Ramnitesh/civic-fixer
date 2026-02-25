@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CrowdCivicFix",
+    "name": "Crowd Civic Fix",
     "slug": "civic-fixer",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,7 +13,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.crowdcivicfix.app"
+      "bundleIdentifier": "com.crowdcivicfix.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,8 +25,11 @@
       },
       "package": "com.crowdcivicfix.app"
     },
-    "plugins": [
-      "expo-secure-store"
-    ]
+    "plugins": ["expo-secure-store"],
+    "extra": {
+      "eas": {
+        "projectId": "1d2338dc-9507-40c2-9a74-55eebd452657"
+      }
+    }
   }
 }

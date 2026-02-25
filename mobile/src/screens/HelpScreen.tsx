@@ -97,7 +97,7 @@ export default function HelpScreen() {
   const handleRateApp = () => {
     Alert.alert(
       "Rate App",
-      "If you enjoy using CrowdCivicFix, please take a moment to rate us!",
+      "If you enjoy using Crowd Civic Fix, please take a moment to rate us!",
       [
         { text: "Later", style: "cancel" },
         { text: "Rate Now", onPress: () => {} },
@@ -185,10 +185,10 @@ export default function HelpScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.aboutCard}>
-            <Text style={styles.appName}>CrowdCivicFix</Text>
+            <Text style={styles.appName}>Crowd Civic Fix</Text>
             <Text style={styles.appVersion}>Version 1.0.0</Text>
             <Text style={styles.appDescription}>
-              CrowdCivicFix is a platform for communities to collectively
+              Crowd Civic Fix is a platform for communities to collectively
               identify, fund, and resolve local civic issues. Join thousands of
               citizens making their neighborhoods better!
             </Text>

@@ -116,7 +116,9 @@ export default function ProfileScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.notLoggedIn}>
           <FontAwesome name="user-circle" size={80} color={colors.muted} />
-          <Text style={styles.notLoggedInTitle}>Welcome to CrowdCivicFix</Text>
+          <Text style={styles.notLoggedInTitle}>
+            Welcome to Crowd Civic Fix
+          </Text>
           <Text style={styles.notLoggedInText}>
             Please login to view your profile
           </Text>
