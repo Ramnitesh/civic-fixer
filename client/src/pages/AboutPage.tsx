@@ -8,7 +8,7 @@ export default function AboutPage() {
     <div className="min-h-screen bg-background">
       <Navigation />
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <h1 className="text-4xl font-bold mb-6">About Civic Fix</h1>
+        <h1 className="text-4xl font-bold mb-6">About KontroPay</h1>
 
         <div className="prose prose-lg max-w-none space-y-8 text-muted-foreground">
           {/* Mission Statement */}
@@ -17,7 +17,7 @@ export default function AboutPage() {
               Our Mission
             </h2>
             <p className="text-lg">
-              Civic Fix empowers communities to identify, fund, and solve local
+              KontroPay empowers communities to identify, fund, and solve local
               civic issues together. We believe that neighborhoods thrive when
               citizens work collaboratively with local leaders to create
               tangible improvements.
@@ -137,7 +137,7 @@ export default function AboutPage() {
           {/* Why Choose Us */}
           <section>
             <h2 className="text-2xl font-bold text-foreground mb-4">
-              Why Choose Civic Fix?
+              Why Choose KontroPay?
             </h2>
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
@@ -177,7 +177,7 @@ export default function AboutPage() {
               Important Note
             </h2>
             <p className="text-sm">
-              Civic Fix is an intermediary platform. We connect users but do not
+              KontroPay is an intermediary platform. We connect users but do not
               employ workers, guarantee job completion, or warrant work quality.
               Users are independent parties who contract directly with each
               other.

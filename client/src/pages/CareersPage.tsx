@@ -30,7 +30,7 @@ const openPositions: JobPosition[] = [
     type: "Full-time",
     location: "Remote / India",
     description:
-      "Lead our marketing initiatives to grow the Civic Fix community. You'll develop and execute strategies to increase user acquisition and brand awareness.",
+      "Lead our marketing initiatives to grow the KontroPay community. You'll develop and execute strategies to increase user acquisition and brand awareness.",
     requirements: [
       "3+ years of experience in digital marketing",
       "Experience with social media and content marketing",
@@ -47,7 +47,7 @@ const openPositions: JobPosition[] = [
     type: "Full-time",
     location: "Remote / India",
     description:
-      "Help our community of users get the most out of Civic Fix. You'll handle customer inquiries, resolve issues, and ensure a great user experience.",
+      "Help our community of users get the most out of KontroPay. You'll handle customer inquiries, resolve issues, and ensure a great user experience.",
     requirements: [
       "1+ years of customer support experience",
       "Excellent problem-solving skills",
@@ -64,7 +64,7 @@ export default function CareersPage() {
     <div className="min-h-screen bg-background">
       <Navigation />
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <h1 className="text-4xl font-bold mb-6">Careers at Civic Fix</h1>
+        <h1 className="text-4xl font-bold mb-6">Careers at KontroPay</h1>
 
         <div className="prose prose-lg max-w-none space-y-8 text-muted-foreground">
           {/* Hero Section */}
@@ -195,7 +195,7 @@ export default function CareersPage() {
               Our Culture
             </h2>
             <div className="bg-card p-6 rounded-xl border">
-              <p className="mb-4">At Civic Fix, we believe in:</p>
+              <p className="mb-4">At KontroPay, we believe in:</p>
               <ul className="space-y-3">
                 <li className="flex items-start gap-3">
                   <ArrowRight className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
@@ -291,7 +291,7 @@ export default function CareersPage() {
               Questions?
             </h2>
             <p className="mb-4">
-              If you have any questions about working at Civic Fix, we'd love to
+              If you have any questions about working at KontroPay, we'd love to
               hear from you!
             </p>
             <Link

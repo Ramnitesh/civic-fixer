@@ -18,7 +18,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
           {/* Company Info */}
           <div className="space-y-4">
-            <h3 className="text-xl font-bold text-white">Civic Fix</h3>
+            <h3 className="text-xl font-bold text-white">KontroPay</h3>
             <p className="text-sm leading-relaxed">
               Community-powered platform connecting citizens, workers, and local
               leaders to solve neighborhood issues together.
@@ -267,11 +267,11 @@ export function Footer() {
             <div className="pt-4 space-y-2">
               <div className="flex items-center gap-2 text-sm">
                 <Mail className="w-4 h-4" />
-                <span>support@civicfix.com</span>
+                <span>support@kontropay.com</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Phone className="w-4 h-4" />
-                <span>1-800-CIVIC-FIX</span>
+                <span>1-800-789-3453</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <MapPin className="w-4 h-4" />
@@ -288,7 +288,7 @@ export function Footer() {
               Platform Disclaimer
             </h5>
             <p className="text-xs leading-relaxed text-gray-400">
-              Civic Fix operates as an intermediary platform connecting users
+              KontroPay operates as an intermediary platform connecting users
               for community-driven projects. We do not employ workers, guarantee
               job completion, or warrant the quality of work performed. Users
               are independent parties who contract directly with each other. The
@@ -302,7 +302,7 @@ export function Footer() {
         {/* Copyright */}
         <div className="mt-8 pt-8 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-gray-500">
-            © {currentYear} Civic Fix. All rights reserved.
+            © {currentYear} KontroPay. All rights reserved.
           </p>
           <div className="flex gap-6 text-sm text-gray-500">
             <Link

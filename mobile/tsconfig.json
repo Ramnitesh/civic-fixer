@@ -3,6 +3,8 @@
   "compilerOptions": {
     "strict": true,
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
-  }
+    "allowSyntheticDefaultImports": true,
+    "typeRoots": ["./node_modules/@types", "./src/types"]
+  },
+  "include": ["**/*.ts", "**/*.tsx", "src/types/**/*.d.ts"]
 }

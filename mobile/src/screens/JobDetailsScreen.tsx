@@ -149,13 +149,11 @@ export default function JobDetailsScreen() {
 
         {/* Content */}
         <View style={styles.content}>
-          {/* Title & Location */}
           <Text style={styles.title}>{job.title}</Text>
           <View style={styles.locationRow}>
             <FontAwesome name="map-marker" size={16} color={colors.muted} />
             <Text style={styles.locationText}>{job.location}</Text>
           </View>
-
           {/* Leader Info */}
           <View style={styles.leaderCard}>
             <View style={styles.leaderAvatar}>
@@ -168,13 +166,11 @@ export default function JobDetailsScreen() {
               </Text>
             </View>
           </View>
-
           {/* Description */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Description</Text>
             <Text style={styles.description}>{job.description}</Text>
           </View>
-
           {/* Funding Progress */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Funding Progress</Text>
@@ -195,7 +191,6 @@ export default function JobDetailsScreen() {
               <Text style={styles.targetText}>Goal: ₹{job.targetAmount}</Text>
             </View>
           </View>
-
           {/* Contribution Section */}
           {job.status === "FUNDING_OPEN" && (
             <View style={styles.section}>
@@ -241,7 +236,6 @@ export default function JobDetailsScreen() {
               )}
             </View>
           )}
-
           {/* Details */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Details</Text>
@@ -254,12 +248,22 @@ export default function JobDetailsScreen() {
                     : "Leader Execution"}
                 </Text>
               </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Private Property</Text>
-                <Text style={styles.detailValue}>
-                  {job.isPrivateResidentialProperty ? "Yes" : "No"}
-                </Text>
-              </View>
+              {job.executionMode === "WORKER_EXECUTION" && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Private Property</Text>
+                  <Text style={styles.detailValue}>
+                    {job.isPrivateResidentialProperty ? "Yes" : "No"}
+                  </Text>
+                </View>
+              )}
+              {job.executionMode === "LEADER_EXECUTION" && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Private Job</Text>
+                  <Text style={styles.detailValue}>
+                    {job.isPrivateJob ? "Yes (Contributors Only)" : "No"}
+                  </Text>
+                </View>
+              )}
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Platform Fee</Text>
                 <Text style={styles.detailValue}>
@@ -274,34 +278,37 @@ export default function JobDetailsScreen() {
               </View>
             </View>
           </View>
-
           {/* Contributors */}
-          {job.contributorCount && job.contributorCount > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>
-                Contributors ({job.contributorCount})
-              </Text>
-              <View style={styles.contributorsList}>
-                {job.contributorProfiles?.map((contributor, index) => (
-                  <View key={index} style={styles.contributorItem}>
-                    <View style={styles.contributorAvatar}>
-                      <Text style={styles.contributorInitial}>
-                        {contributor.name.charAt(0)}
-                      </Text>
-                    </View>
-                    <View style={styles.contributorInfo}>
-                      <Text style={styles.contributorName}>
-                        {contributor.name}
-                      </Text>
-                      <Text style={styles.contributorAmount}>
-                        ₹{contributor.contributionAmount}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
+          {job.contributorCount != null &&
+            job.contributorCount != undefined &&
+            Number(job.contributorCount) > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  Contributors ({String(job?.contributorCount) || 0})
+                </Text>
+                <View style={styles.contributorsList}>
+                  {job.contributorProfiles &&
+                    job.contributorProfiles.length > 0 &&
+                    job?.contributorProfiles?.map((contributor, index) => (
+                      <View key={index} style={styles.contributorItem}>
+                        <View style={styles.contributorAvatar}>
+                          <Text style={styles.contributorInitial}>
+                            {contributor?.name?.charAt(0) || ""}
+                          </Text>
+                        </View>
+                        <View style={styles.contributorInfo}>
+                          <Text style={styles.contributorName}>
+                            {contributor?.name}
+                          </Text>
+                          <Text style={styles.contributorAmount}>
+                            ₹{String(contributor?.contributionAmount ?? 0)}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                </View>
               </View>
-            </View>
-          )}
+            )}
         </View>
       </ScrollView>
     </SafeAreaView>

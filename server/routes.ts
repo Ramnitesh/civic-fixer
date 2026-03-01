@@ -393,7 +393,8 @@ export async function registerRoutes(
 
     // Filter private jobs: leader execution jobs with isPrivateJob=true
     // should only be visible to contributors or the job leader
-    if (req.isAuthenticated()) {
+    const isAuthenticated = req.isAuthenticated() || req.user;
+    if (isAuthenticated) {
       const userId = req.user!.id;
       filtered = filtered.filter((job) => {
         // Always show jobs that are not private
@@ -1140,8 +1141,8 @@ export async function registerRoutes(
     const envName = process.env.NODE_ENV || "development";
     const folder =
       uploadPurpose === "job_image"
-        ? `${envName}/civicfix/job/images`
-        : `${envName}/civicfix/worker/proof`;
+        ? `${envName}/kontropay/job/images`
+        : `${envName}/kontropay/worker/proof`;
     const signature = createHash("sha1")
       .update(`folder=${folder}&timestamp=${timestamp}${config.apiSecret}`)
       .digest("hex");
@@ -1816,7 +1817,13 @@ export async function registerRoutes(
       return res.json({
         message: "Login successful",
         token,
-        user: { id: user.id, username: user.username, name: user.name, phone: user.phone, role: user.role },
+        user: {
+          id: user.id,
+          username: user.username,
+          name: user.name,
+          phone: user.phone,
+          role: user.role,
+        },
       });
     });
   });
@@ -1876,7 +1883,13 @@ export async function registerRoutes(
       return res.json({
         message: "Registration successful",
         token,
-        user: { id: user.id, username: user.username, name: user.name, phone: user.phone, role: user.role },
+        user: {
+          id: user.id,
+          username: user.username,
+          name: user.name,
+          phone: user.phone,
+          role: user.role,
+        },
       });
     });
   });

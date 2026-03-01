@@ -9,6 +9,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { useAuth } from "../navigation/AuthContext";
 import { colors } from "../utils/colors";
@@ -16,6 +17,7 @@ import { authAPI } from "../services/api";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import logoImage from "../../assets/icon.png";
 
 interface MenuItem {
   id: string;
@@ -113,8 +115,10 @@ export default function ProfileScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.notLoggedIn}>
-          <FontAwesome name="user-circle" size={80} color={colors.muted} />
-          <Text style={styles.notLoggedInTitle}>Welcome to Kontro Pay</Text>
+          <Image source={logoImage} style={styles.logo} />
+          <Text style={styles.notLoggedInTitle}>
+            Welcome to Kontro<Text style={{ color: colors.primary }}>Pay</Text>
+          </Text>
           <Text style={styles.notLoggedInText}>
             Please login to view your profile
           </Text>
@@ -197,16 +201,6 @@ export default function ProfileScreen() {
             <Text style={styles.label}>Phone</Text>
             <Text style={styles.valueText}>{user.phone || "Not added"}</Text>
           </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Username</Text>
-            <Text style={styles.valueText}>{user.username}</Text>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Role</Text>
-            <Text style={styles.valueText}>{user.role}</Text>
-          </View>
         </View>
 
         {/* Menu Section */}
@@ -258,6 +252,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 24,
     gap: 16,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 16,
   },
   notLoggedInTitle: {
     fontSize: 24,

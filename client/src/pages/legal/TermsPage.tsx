@@ -14,7 +14,7 @@ export default function TermsPage() {
               1. Acceptance of Terms
             </h2>
             <p>
-              By accessing and using Civic Fix, you accept and agree to be bound
+              By accessing and using KontroPay, you accept and agree to be bound
               by the terms and provision of this agreement.
             </p>
           </section>
@@ -23,7 +23,7 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold text-foreground mb-2">
               2. Platform Role - Intermediary Only
             </h2>
-            <p>Civic Fix operates solely as an intermediary platform. We:</p>
+            <p>KontroPay operates solely as an intermediary platform. We:</p>
             <ul className="list-disc pl-6 space-y-1 mt-2">
               <li>Provide a marketplace for connecting users</li>
               <li>Facilitate payments between parties</li>
@@ -38,9 +38,9 @@ export default function TermsPage() {
               3. User Relationships
             </h2>
             <p>
-              Users of Civic Fix are independent parties. Any agreement or
+              Users of KontroPay are independent parties. Any agreement or
               contract formed between users is solely between those parties.
-              Civic Fix is not a party to such agreements.
+              KontroPay is not a party to such agreements.
             </p>
           </section>
 
@@ -48,7 +48,7 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold text-foreground mb-2">
               4. Limitation of Liability
             </h2>
-            <p>Civic Fix shall not be liable for any damages arising from:</p>
+            <p>KontroPay shall not be liable for any damages arising from:</p>
             <ul className="list-disc pl-6 space-y-1 mt-2">
               <li>Any transaction between users</li>
               <li>Quality of work performed by workers</li>
@@ -96,7 +96,7 @@ export default function TermsPage() {
               8. Termination
             </h2>
             <p>
-              Civic Fix reserves the right to terminate accounts that violate
+              KontroPay reserves the right to terminate accounts that violate
               these terms without prior notice.
             </p>
           </section>

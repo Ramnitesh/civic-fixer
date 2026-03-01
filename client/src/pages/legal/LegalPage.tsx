@@ -13,12 +13,12 @@ const legalContent: Record<
       {
         heading: "Acceptance of Terms",
         content:
-          "By accessing and using Civic Fix, you accept and agree to be bound by the terms and provision of this agreement.",
+          "By accessing and using KontroPay, you accept and agree to be bound by the terms and provision of this agreement.",
       },
       {
         heading: "Platform Role - Intermediary Only",
         content: [
-          "Civic Fix operates solely as an intermediary platform. We:",
+          "KontroPay operates solely as an intermediary platform. We:",
           "- Provide a marketplace for connecting users",
           "- Facilitate payments between parties",
           "- Do NOT employ any workers or service providers",
@@ -29,12 +29,12 @@ const legalContent: Record<
       {
         heading: "User Relationships",
         content:
-          "Users of Civic Fix are independent parties. Any agreement or contract formed between users is solely between those parties. Civic Fix is not a party to such agreements.",
+          "Users of KontroPay are independent parties. Any agreement or contract formed between users is solely between those parties. KontroPay is not a party to such agreements.",
       },
       {
         heading: "Limitation of Liability",
         content: [
-          "Civic Fix shall not be liable for any damages arising from:",
+          "KontroPay shall not be liable for any damages arising from:",
           "- Any transaction between users",
           "- Quality of work performed by workers",
           "- Non-completion of jobs or projects",
@@ -95,7 +95,7 @@ const legalContent: Record<
         heading: "Refund Request Process",
         content: [
           "To request a refund:",
-          "- Contact support@civicfix.com within 30 days of payment",
+          "- Contact support@kontropay.com within 30 days of payment",
           "- Provide your order details and reason for refund",
           "- Allow 5-7 business days for processing",
         ],
@@ -112,7 +112,7 @@ const legalContent: Record<
       {
         heading: "Wallet Overview",
         content:
-          "Your Civic Fix wallet is used to hold funds for jobs and receive payments for completed work. All funds are held in secure escrow until job completion is verified.",
+          "Your KontroPay wallet is used to hold funds for jobs and receive payments for completed work. All funds are held in secure escrow until job completion is verified.",
       },
       {
         heading: "Adding Funds",
@@ -202,7 +202,7 @@ const legalContent: Record<
       {
         heading: "Right to Delete",
         content:
-          "You have the right to request deletion of your personal data at any time. Contact us at support@civicfix.com to request deletion.",
+          "You have the right to request deletion of your personal data at any time. Contact us at support@kontropay.com to request deletion.",
       },
       {
         heading: "Deletion Process",
@@ -222,7 +222,7 @@ const legalContent: Record<
       {
         heading: "Anti-Money Laundering Commitment",
         content:
-          "Civic Fix is committed to preventing money laundering and terrorist financing. We comply with all applicable AML laws and regulations.",
+          "KontroPay is committed to preventing money laundering and terrorist financing. We comply with all applicable AML laws and regulations.",
       },
       {
         heading: "Customer Due Diligence",
@@ -261,7 +261,7 @@ const legalContent: Record<
       {
         heading: "What is Escrow",
         content:
-          "Escrow is a financial arrangement where a third party holds funds during a transaction. On Civic Fix, we hold funds until the job is completed and verified.",
+          "Escrow is a financial arrangement where a third party holds funds during a transaction. On KontroPay, we hold funds until the job is completed and verified.",
       },
       {
         heading: "Benefits of Escrow",
@@ -294,7 +294,7 @@ const legalContent: Record<
       {
         heading: "Unfreezing Your Wallet",
         content:
-          "Contact support@civicfix.com if your wallet has been frozen. We will work with you to resolve any issues.",
+          "Contact support@kontropay.com if your wallet has been frozen. We will work with you to resolve any issues.",
       },
     ],
   },
@@ -304,7 +304,7 @@ const legalContent: Record<
       {
         heading: "Fee Structure",
         content:
-          "Civic Fix charges a small platform fee on each transaction to maintain and improve our services. The current fee is 10% of the job value.",
+          "KontroPay charges a small platform fee on each transaction to maintain and improve our services. The current fee is 10% of the job value.",
       },
     ],
   },
@@ -342,12 +342,12 @@ const legalContent: Record<
       {
         heading: "Liability Disclaimer",
         content:
-          "Civic Fix is not liable for any indirect, incidental, or consequential damages arising from your use of the platform.",
+          "KontroPay is not liable for any indirect, incidental, or consequential damages arising from your use of the platform.",
       },
       {
         heading: "Maximum Liability",
         content:
-          "Our maximum liability is limited to the amount you have paid to Civic Fix in the last 12 months.",
+          "Our maximum liability is limited to the amount you have paid to KontroPay in the last 12 months.",
       },
     ],
   },
@@ -357,7 +357,7 @@ const legalContent: Record<
       {
         heading: "Disclaimer",
         content:
-          "Civic Fix operates as an intermediary platform. We do not employ workers, guarantee job completion, or warrant the quality of work performed. Users are independent parties who contract directly with each other.",
+          "KontroPay operates as an intermediary platform. We do not employ workers, guarantee job completion, or warrant the quality of work performed. Users are independent parties who contract directly with each other.",
       },
     ],
   },

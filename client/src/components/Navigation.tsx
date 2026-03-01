@@ -22,6 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import logoImage from "/favicon.png";
 
 export function Navigation() {
   const { user, logout, updateProfile, isUpdatingProfile } = useAuth();
@@ -70,9 +71,7 @@ export function Navigation() {
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary/20">
-              K
-            </div>
+            <img src={logoImage} alt="KontroPay Logo" className="w-8 h-8" />
             <span className="font-display font-bold text-xl tracking-tight hidden sm:inline-block">
               Kontro<span className="text-primary">Pay</span>
             </span>

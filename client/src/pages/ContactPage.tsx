@@ -39,10 +39,10 @@ export default function ContactPage() {
               </h3>
               <p className="text-sm mb-4">For general inquiries and support</p>
               <a
-                href="mailto:support@civicfix.com"
+                href="mailto:support@kontropay.com"
                 className="text-primary hover:underline font-medium"
               >
-                support@civicfix.com
+                support@kontropay.com
               </a>
             </div>
 

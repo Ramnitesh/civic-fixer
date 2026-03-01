@@ -119,7 +119,7 @@ export default function HelpPage() {
             </h2>
             <div className="grid md:grid-cols-3 gap-4">
               <a
-                href="mailto:support@civicfix.com"
+                href="mailto:support@kontropay.com"
                 className="bg-card p-6 rounded-xl border hover:border-primary transition group"
               >
                 <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600 mb-4">
@@ -277,7 +277,7 @@ export default function HelpPage() {
             </p>
             <div className="flex gap-4">
               <a
-                href="mailto:support@civicfix.com"
+                href="mailto:support@kontropay.com"
                 className="bg-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary/90 transition"
               >
                 Email Support

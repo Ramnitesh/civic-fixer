@@ -37,7 +37,7 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
-const USER_STORAGE_KEY = "civicfix_user_data";
+const USER_STORAGE_KEY = "kontropay_user_data";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);

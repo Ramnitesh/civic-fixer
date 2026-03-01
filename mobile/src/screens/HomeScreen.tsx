@@ -10,7 +10,6 @@ import {
   RefreshControl,
   Image,
 } from "react-native";
-import { useAuth } from "../navigation/AuthContext";
 import { colors } from "../utils/colors";
 import { jobsAPI } from "../services/api";
 import { Job } from "../types";
@@ -18,6 +17,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Feather from "@expo/vector-icons/Feather";
+import logoImage from "../../assets/icon.png";
 
 export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -84,7 +84,8 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>
-            <Text style={{ color: colors.foreground }}>Kontro</Text>Pay
+            <Image source={logoImage} style={styles.logo} />
+            <Text style={{ color: colors.foreground }}>ontro</Text>Pay
           </Text>
           <Text style={styles.headerSubtitle}>
             Transform your neighborhood together
@@ -107,14 +108,14 @@ export default function HomeScreen() {
             onPress={() => navigation.navigate("Jobs")}
           >
             <FontAwesome name="briefcase" size={24} color={colors.primary} />
-            <Text style={styles.actionText}>Browse Jobs</Text>
+            <Text style={styles.actionText}>My Jobs</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => navigation.navigate("CreateJob")}
           >
             <Feather name="trending-up" size={24} color={colors.success} />
-            <Text style={styles.actionText}>Start Project</Text>
+            <Text style={styles.actionText}>Start New</Text>
           </TouchableOpacity>
         </View>
 
@@ -237,6 +238,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.muted,
     marginTop: 4,
+  },
+  logo: {
+    width: 20,
+    height: 20,
   },
   searchBar: {
     flexDirection: "row",

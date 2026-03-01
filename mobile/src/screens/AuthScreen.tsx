@@ -11,12 +11,14 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { useAuth } from "../navigation/AuthContext";
 import { colors } from "../utils/colors";
 import { useNavigation } from "@react-navigation/native";
 import { authAPI } from "../services/api";
 import OTPInput from "../components/OTPInput";
+import logoImage from "../../assets/icon.png";
 
 export default function AuthScreen() {
   const { setUserFromLogin } = useAuth();
@@ -55,7 +57,13 @@ export default function AuthScreen() {
       // Show OTP input field
       setOtpSent(true);
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to send OTP");
+      // Extract error message from API response or use fallback
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Failed to send OTP";
+      Alert.alert("Error", errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -91,6 +99,7 @@ export default function AuthScreen() {
           <View style={styles.content}>
             {/* Header */}
             <View style={styles.header}>
+              <Image source={logoImage} style={styles.logo} />
               <Text style={styles.title}>
                 <Text style={{ color: colors.foreground }}>Kontro</Text>Pay
               </Text>
@@ -176,16 +185,6 @@ export default function AuthScreen() {
                     />
                   </View>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Username</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="johndoe"
-                      value={username}
-                      onChangeText={setUsername}
-                      autoCapitalize="none"
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
                     <Text style={styles.label}>Phone Number</Text>
                     <TextInput
                       style={styles.input}
@@ -232,16 +231,6 @@ export default function AuthScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Password</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="••••••••"
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry
-                    />
-                  </View>
                   <TouchableOpacity
                     style={styles.submitButton}
                     onPress={handleSubmit}
@@ -275,6 +264,11 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 16,
   },
   header: {
     alignItems: "center",

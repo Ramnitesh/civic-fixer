@@ -71,7 +71,7 @@ function TabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <FontAwesome name="briefcase" color={color} size={size} />
           ),
-          headerTitle: "Browse Jobs",
+          headerTitle: "My Jobs",
         }}
       />
       <Tab.Screen

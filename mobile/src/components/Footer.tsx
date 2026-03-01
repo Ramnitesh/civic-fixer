@@ -70,7 +70,7 @@ const FooterSection: React.FC<FooterSectionProps> = ({ section }) => {
     if (url.startsWith("http")) {
       Linking.openURL(url);
     } else {
-      Linking.openURL(`https://civicfix.com${url}`);
+      Linking.openURL(`https://kontropay.com${url}`);
     }
   };
 
@@ -99,7 +99,7 @@ export function Footer() {
       Linking.openURL(url);
     } else {
       // For internal routes, open in browser (since we're in mobile app)
-      Linking.openURL(`https://civicfix.com${url}`);
+      Linking.openURL(`https://kontropay.com${url}`);
     }
   };
 
@@ -109,7 +109,7 @@ export function Footer() {
       <View style={styles.disclaimer}>
         <Text style={styles.disclaimerTitle}>Platform Disclaimer</Text>
         <Text style={styles.disclaimerText}>
-          Civic Fix operates as an intermediary platform connecting users for
+          KontroPay operates as an intermediary platform connecting users for
           community-driven projects. We do not employ workers, guarantee job
           completion, or warrant the quality of work performed. Users are
           independent parties who contract directly with each other.
@@ -141,14 +141,14 @@ export function Footer() {
 
       {/* Contact Info */}
       <View style={styles.contactSection}>
-        <Text style={styles.contactText}>support@civicfix.com</Text>
+        <Text style={styles.contactText}>support@kontropay.com</Text>
         <Text style={styles.contactText}>1-800-CIVIC-FIX</Text>
       </View>
 
       {/* Copyright */}
       <View style={styles.copyright}>
         <Text style={styles.copyrightText}>
-          © {currentYear} Civic Fix. All rights reserved.
+          © {currentYear} KontroPay. All rights reserved.
         </Text>
         <View style={styles.legalLinks}>
           <TouchableOpacity

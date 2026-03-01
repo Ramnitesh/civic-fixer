@@ -117,7 +117,7 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold text-foreground mb-2">
               10. Contact
             </h2>
-            <p>For privacy concerns, contact us at support@civicfix.com</p>
+            <p>For privacy concerns, contact us at support@kontropay.com</p>
           </section>
         </div>
       </div>

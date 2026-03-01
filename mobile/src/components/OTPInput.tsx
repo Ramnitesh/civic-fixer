@@ -139,7 +139,13 @@ export default function OTPInput({
         }
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Invalid OTP. Please try again.");
+      // Extract error message from API response or use fallback
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Invalid OTP. Please try again.";
+      Alert.alert("Error", errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -153,7 +159,13 @@ export default function OTPInput({
       setOtp(["", "", "", "", "", ""]);
       Alert.alert("Success", "OTP sent successfully!");
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to resend OTP");
+      // Extract error message from API response or use fallback
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Failed to resend OTP";
+      Alert.alert("Error", errorMessage);
     }
   };
 
