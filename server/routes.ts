@@ -1797,8 +1797,13 @@ export async function registerRoutes(
       if (err) {
         return res.status(500).json({ message: "Login failed" });
       }
+
+      // Generate token for mobile app
+      const token = `otp_${user.id}_${Date.now()}`;
+
       return res.json({
         message: "Login successful",
+        token,
         user: {
           id: user.id,
           username: user.username,
@@ -1857,8 +1862,13 @@ export async function registerRoutes(
       if (err) {
         return res.status(500).json({ message: "Registration failed" });
       }
+
+      // Generate token for mobile app
+      const token = `otp_${user.id}_${Date.now()}`;
+
       return res.json({
         message: "Registration successful",
+        token,
         user: {
           id: user.id,
           username: user.username,

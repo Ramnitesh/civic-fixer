@@ -15,7 +15,6 @@ import WalletScreen from "../screens/WalletScreen";
 import ContributionsScreen from "../screens/ContributionsScreen";
 import MyJobsScreen from "../screens/MyJobsScreen";
 import HelpScreen from "../screens/HelpScreen";
-import OTPScreen from "../screens/OTPScreen";
 
 // Auth Context - import from AuthContext
 import { useAuth, AuthProvider } from "./AuthContext";
@@ -145,11 +144,6 @@ function MainNavigator() {
         name="Help"
         component={HelpScreen}
         options={{ headerTitle: "Help & Support" }}
-      />
-      <Stack.Screen
-        name="OTPScreen"
-        component={OTPScreen}
-        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

@@ -16,9 +16,10 @@ import { useAuth } from "../navigation/AuthContext";
 import { colors } from "../utils/colors";
 import { useNavigation } from "@react-navigation/native";
 import { authAPI } from "../services/api";
+import OTPInput from "../components/OTPInput";
 
 export default function AuthScreen() {
-  const { login, register } = useAuth();
+  const { setUserFromLogin } = useAuth();
   const navigation = useNavigation<any>();
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,6 +31,9 @@ export default function AuthScreen() {
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState("MEMBER");
 
+  // OTP fields
+  const [otpSent, setOtpSent] = useState(false);
+
   const handleSendOTP = async () => {
     // Validate phone number
     if (!phone || phone.length < 10) {
@@ -40,15 +44,13 @@ export default function AuthScreen() {
     try {
       setIsLoading(true);
       // Send OTP to phone number
-      await authAPI.sendOTP(phone);
+      const response = await authAPI.sendOTP(phone);
 
-      // Navigate to OTP screen
-      navigation.navigate("OTPScreen", {
-        phone,
-        isLogin,
-        name: isLogin ? undefined : name,
-        role: isLogin ? undefined : role,
-      });
+      // Console the OTP for mobile
+      console.log("OTP:", response.devOtp);
+
+      // Show OTP input field
+      setOtpSent(true);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to send OTP");
     } finally {
@@ -63,6 +65,17 @@ export default function AuthScreen() {
       return;
     }
     await handleSendOTP();
+  };
+
+  const handleOTPSuccess = () => {
+    // Navigate to main app
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  };
+
+  const handleBackToPhone = () => {
+    setOtpSent(false);
   };
 
   return (
@@ -84,30 +97,43 @@ export default function AuthScreen() {
             {/* Form */}
             <View style={styles.form}>
               {/* Tabs */}
-              <View style={styles.tabs}>
-                <TouchableOpacity
-                  style={[styles.tab, isLogin && styles.tabActive]}
-                  onPress={() => setIsLogin(true)}
-                >
-                  <Text
-                    style={[styles.tabText, isLogin && styles.tabTextActive]}
+              {!otpSent && (
+                <View style={styles.tabs}>
+                  <TouchableOpacity
+                    style={[styles.tab, isLogin && styles.tabActive]}
+                    onPress={() => setIsLogin(true)}
                   >
-                    Login
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.tab, !isLogin && styles.tabActive]}
-                  onPress={() => setIsLogin(false)}
-                >
-                  <Text
-                    style={[styles.tabText, !isLogin && styles.tabTextActive]}
+                    <Text
+                      style={[styles.tabText, isLogin && styles.tabTextActive]}
+                    >
+                      Login
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.tab, !isLogin && styles.tabActive]}
+                    onPress={() => setIsLogin(false)}
                   >
-                    Register
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                    <Text
+                      style={[styles.tabText, !isLogin && styles.tabTextActive]}
+                    >
+                      Register
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
-              {isLogin ? (
+              {otpSent ? (
+                // OTP Verification Form - using OTPInput component
+                <OTPInput
+                  phone={phone}
+                  isLogin={isLogin}
+                  name={name}
+                  role={role}
+                  onSuccess={handleOTPSuccess}
+                  onBack={handleBackToPhone}
+                  setUserFromLogin={setUserFromLogin}
+                />
+              ) : isLogin ? (
                 // Login Form - OTP based
                 <View style={styles.formFields}>
                   <View style={styles.inputGroup}>
@@ -343,6 +369,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     marginTop: 8,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
   },
   submitButtonText: {
     color: "white",
