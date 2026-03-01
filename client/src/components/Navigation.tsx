@@ -71,10 +71,10 @@ export function Navigation() {
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary/20">
-              C
+              K
             </div>
             <span className="font-display font-bold text-xl tracking-tight hidden sm:inline-block">
-              CrowdCivic<span className="text-primary">Fix</span>
+              Kontro<span className="text-primary">Pay</span>
             </span>
           </div>
         </Link>

@@ -20,6 +20,7 @@ export interface Job {
   location: string;
   targetAmount: number;
   isPrivateResidentialProperty: boolean;
+  isPrivateJob: boolean;
   collectedAmount: number;
   executionMode: "WORKER_EXECUTION" | "LEADER_EXECUTION";
   status: JobStatus;

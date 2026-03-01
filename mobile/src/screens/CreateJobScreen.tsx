@@ -38,6 +38,7 @@ export default function CreateJobScreen() {
   const [location, setLocation] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [isPrivateProperty, setIsPrivateProperty] = useState(false);
+  const [isPrivateJob, setIsPrivateJob] = useState(false);
   const [executionMode, setExecutionMode] = useState("WORKER_EXECUTION");
 
   const handleSubmit = async () => {
@@ -54,6 +55,7 @@ export default function CreateJobScreen() {
         location,
         targetAmount: parseFloat(targetAmount),
         isPrivateResidentialProperty: isPrivateProperty,
+        isPrivateJob: isPrivateJob,
         executionMode: executionMode as any,
       });
       Alert.alert("Success", "Job created successfully!");
@@ -177,17 +179,41 @@ export default function CreateJobScreen() {
               </View>
             </View>
 
-            <View style={styles.switchGroup}>
-              <View style={styles.switchInfo}>
-                <Text style={styles.switchLabel}>Private Property</Text>
+            {executionMode === "WORKER_EXECUTION" && (
+              <View style={styles.switchGroup}>
+                <View style={styles.switchInfo}>
+                  <Text style={styles.switchLabel}>Private Property</Text>
+                  <Text style={styles.switchDescription}>
+                    Required for worker execution
+                  </Text>
+                </View>
+                <Switch
+                  value={isPrivateProperty}
+                  onValueChange={setIsPrivateProperty}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor="white"
+                />
               </View>
-              <Switch
-                value={isPrivateProperty}
-                onValueChange={setIsPrivateProperty}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor="white"
-              />
-            </View>
+            )}
+
+            {executionMode === "LEADER_EXECUTION" && (
+              <View style={styles.switchGroup}>
+                <View style={styles.switchInfo}>
+                  <Text style={styles.switchLabel}>
+                    Private Job (Contributors Only)
+                  </Text>
+                  <Text style={styles.switchDescription}>
+                    Only contributors can see this job
+                  </Text>
+                </View>
+                <Switch
+                  value={isPrivateJob}
+                  onValueChange={setIsPrivateJob}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor="white"
+                />
+              </View>
+            )}
 
             <TouchableOpacity
               style={[
@@ -274,8 +300,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
   },
-  switchInfo: { flex: 1 },
+  switchInfo: { flex: 1, marginRight: 12 },
   switchLabel: { fontSize: 14, fontWeight: "500", color: colors.foreground },
+  switchDescription: { fontSize: 12, color: colors.muted, marginTop: 2 },
   submitButton: {
     backgroundColor: colors.primary,
     paddingVertical: 16,

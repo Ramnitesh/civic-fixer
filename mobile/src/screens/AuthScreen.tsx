@@ -44,7 +44,10 @@ export default function AuthScreen() {
     try {
       setIsLoading(true);
       // Send OTP to phone number
-      const response = await authAPI.sendOTP(phone);
+      const response = await authAPI.sendOTP(
+        phone,
+        isLogin ? "login" : "register",
+      );
 
       // Console the OTP for mobile
       console.log("OTP:", response.devOtp);
@@ -88,7 +91,9 @@ export default function AuthScreen() {
           <View style={styles.content}>
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.title}>Crowd CivicFix</Text>
+              <Text style={styles.title}>
+                <Text style={{ color: colors.foreground }}>Kontro</Text>Pay
+              </Text>
               <Text style={styles.subtitle}>
                 Join the movement to improve your community
               </Text>

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Crowd Civic Fix",
+    "name": "Kontro Pay",
     "slug": "civic-fixer",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.crowdcivicfix.app",
+      "bundleIdentifier": "com.kontropay.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -23,7 +23,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#10b981"
       },
-      "package": "com.crowdcivicfix.app"
+      "package": "com.kontropay.app"
     },
     "plugins": ["expo-secure-store"],
     "extra": {

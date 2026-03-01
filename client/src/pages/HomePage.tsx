@@ -34,9 +34,8 @@ export default function HomePage() {
               Transform Your Neighborhood Together
             </h1>
             <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed">
-              Crowd Civic Fix empowers communities to identify, fund, and solve
-              local issues through transparent collaboration and verified
-              results.
+              Kontro Pay empowers communities to identify, fund, and solve local
+              issues through transparent collaboration and verified results.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/jobs">
@@ -107,7 +106,7 @@ export default function HomePage() {
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4 font-display">
-                Get the Crowd Civic Fix App
+                Get the Kontro Pay App
               </h2>
               <p className="text-muted-foreground text-lg">
                 Take action on-the-go. Report issues, track progress, and

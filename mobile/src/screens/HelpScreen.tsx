@@ -83,12 +83,12 @@ export default function HelpScreen() {
   const handleContactSupport = () => {
     Alert.alert(
       "Contact Support",
-      "You can reach us at:\n\nEmail: support@civicfixer.com\nPhone: +91 9876543210",
+      "You can reach us at:\n\nEmail: support@kontropay.com\nPhone: +91 9876543210",
       [
         { text: "OK", style: "cancel" },
         {
           text: "Email Us",
-          onPress: () => Linking.openURL("mailto:support@civicfixer.com"),
+          onPress: () => Linking.openURL("mailto:support@kontropay.com"),
         },
       ],
     );
@@ -97,7 +97,7 @@ export default function HelpScreen() {
   const handleRateApp = () => {
     Alert.alert(
       "Rate App",
-      "If you enjoy using Crowd Civic Fix, please take a moment to rate us!",
+      "If you enjoy using Kontro Pay, please take a moment to rate us!",
       [
         { text: "Later", style: "cancel" },
         { text: "Rate Now", onPress: () => {} },
@@ -185,12 +185,12 @@ export default function HelpScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.aboutCard}>
-            <Text style={styles.appName}>Crowd Civic Fix</Text>
+            <Text style={styles.appName}>Kontro Pay</Text>
             <Text style={styles.appVersion}>Version 1.0.0</Text>
             <Text style={styles.appDescription}>
-              Crowd Civic Fix is a platform for communities to collectively
-              identify, fund, and resolve local civic issues. Join thousands of
-              citizens making their neighborhoods better!
+              Kontro Pay is a platform for communities to collectively identify,
+              fund, and resolve local civic issues. Join thousands of citizens
+              making their neighborhoods better!
             </Text>
           </View>
         </View>

@@ -43,6 +43,42 @@ export function setupAuth(app: Express) {
   app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());
+  // Middleware to handle token-based authentication for mobile app
+  app.use(async (req, res, next) => {
+    // Skip if already authenticated via session
+    if (req.isAuthenticated()) {
+      return next();
+    }
+
+    // Check for Bearer token in Authorization header
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+
+      // Check if it's an OTP token (format: otp_{userId}_{timestamp})
+      if (token.startsWith("otp_")) {
+        const parts = token.split("_");
+        if (parts.length >= 2) {
+          const userId = parseInt(parts[1], 10);
+          if (!isNaN(userId)) {
+            try {
+              const user = await storage.getUser(userId);
+              if (user) {
+                req.user = user;
+                return next();
+              }
+            } catch (err) {
+              console.error("Error validating token:", err);
+            }
+          }
+        }
+      }
+    }
+
+    // Continue without authentication for public routes
+    next();
+  });
+
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {

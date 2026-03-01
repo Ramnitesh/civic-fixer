@@ -1816,12 +1816,7 @@ export async function registerRoutes(
       return res.json({
         message: "Login successful",
         token,
-        user: {
-          id: user.id,
-          username: user.username,
-          name: user.name,
-          role: user.role,
-        },
+        user: { id: user.id, username: user.username, name: user.name, phone: user.phone, role: user.role },
       });
     });
   });
@@ -1881,12 +1876,7 @@ export async function registerRoutes(
       return res.json({
         message: "Registration successful",
         token,
-        user: {
-          id: user.id,
-          username: user.username,
-          name: user.name,
-          role: user.role,
-        },
+        user: { id: user.id, username: user.username, name: user.name, phone: user.phone, role: user.role },
       });
     });
   });

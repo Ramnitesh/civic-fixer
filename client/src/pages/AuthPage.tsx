@@ -164,8 +164,8 @@ export default function AuthPage() {
       <div className="flex-1 flex items-center justify-center bg-muted/30 p-4">
         <Card className="w-full max-w-md border-border/50 shadow-xl">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-display font-bold text-primary">
-              Crowd Civic Fix
+            <CardTitle className="text-2xl font-display font-bold text-foreground">
+              Kontro <span className="text-primary">Pay</span>
             </CardTitle>
             <CardDescription>
               {mode === "otp"
