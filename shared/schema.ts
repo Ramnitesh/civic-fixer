@@ -41,6 +41,8 @@ export const jobs = pgTable("jobs", {
   isPrivateResidentialProperty: boolean("is_private_residential_property")
     .notNull()
     .default(false),
+  // For leader execution: if true, only contributors can see this job
+  isPrivateJob: boolean("is_private_job").notNull().default(false),
   collectedAmount: real("collected_amount").default(0.0),
   executionMode: text("execution_mode", {
     enum: ["WORKER_EXECUTION", "LEADER_EXECUTION"],

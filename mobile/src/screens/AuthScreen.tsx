@@ -15,6 +15,7 @@ import {
 import { useAuth } from "../navigation/AuthContext";
 import { colors } from "../utils/colors";
 import { useNavigation } from "@react-navigation/native";
+import { authAPI } from "../services/api";
 
 export default function AuthScreen() {
   const { login, register } = useAuth();
@@ -29,25 +30,39 @@ export default function AuthScreen() {
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState("MEMBER");
 
-  const handleSubmit = async () => {
+  const handleSendOTP = async () => {
+    // Validate phone number
+    if (!phone || phone.length < 10) {
+      Alert.alert("Error", "Please enter a valid phone number");
+      return;
+    }
+
     try {
       setIsLoading(true);
-      if (isLogin) {
-        await login(username, password);
-      } else {
-        await register({ username, password, name, phone, role });
-        setIsLoading(false);
-        return;
-      }
-      // Navigate back after successful login/register
-      if (navigation.canGoBack()) {
-        navigation.goBack();
-      }
+      // Send OTP to phone number
+      await authAPI.sendOTP(phone);
+
+      // Navigate to OTP screen
+      navigation.navigate("OTPScreen", {
+        phone,
+        isLogin,
+        name: isLogin ? undefined : name,
+        role: isLogin ? undefined : role,
+      });
     } catch (error: any) {
-      Alert.alert("Error", error.message || "An error occurred");
+      Alert.alert("Error", error.message || "Failed to send OTP");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async () => {
+    // For OTP-based auth, send OTP first
+    if (!phone || phone.length < 10) {
+      Alert.alert("Error", "Please enter a valid phone number");
+      return;
+    }
+    await handleSendOTP();
   };
 
   return (
@@ -93,26 +108,16 @@ export default function AuthScreen() {
               </View>
 
               {isLogin ? (
-                // Login Form
+                // Login Form - OTP based
                 <View style={styles.formFields}>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Username</Text>
+                    <Text style={styles.label}>Phone Number</Text>
                     <TextInput
                       style={styles.input}
-                      placeholder="Enter your username"
-                      value={username}
-                      onChangeText={setUsername}
-                      autoCapitalize="none"
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Password</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="••••••••"
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry
+                      placeholder="+1 234 567 8900"
+                      value={phone}
+                      onChangeText={setPhone}
+                      keyboardType="phone-pad"
                     />
                   </View>
                   <TouchableOpacity
@@ -123,7 +128,7 @@ export default function AuthScreen() {
                     {isLoading ? (
                       <ActivityIndicator color="white" />
                     ) : (
-                      <Text style={styles.submitButtonText}>Sign In</Text>
+                      <Text style={styles.submitButtonText}>Send OTP</Text>
                     )}
                   </TouchableOpacity>
                 </View>

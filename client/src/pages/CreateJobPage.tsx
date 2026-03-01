@@ -61,10 +61,14 @@ export default function CreateJobPage() {
       location: "",
       targetAmount: undefined,
       isPrivateResidentialProperty: false,
+      isPrivateJob: false,
       executionMode: undefined,
       imageUrl: undefined,
     },
   });
+
+  // Get execution mode from form
+  const executionMode = form.watch("executionMode");
 
   const uploadToCloudinary = async (file: File) => {
     const signatureResponse = await fetch("/api/uploads/cloudinary/signature", {
@@ -111,6 +115,20 @@ export default function CreateJobPage() {
   };
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    // Validation: Private residential property is required for worker execution
+    if (
+      data.executionMode === "WORKER_EXECUTION" &&
+      !data.isPrivateResidentialProperty
+    ) {
+      toast({
+        title: "Required Field",
+        description:
+          "Please indicate if this is a private residential property for worker execution jobs.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       let imageUrl: string | undefined;
       if (jobImageFile) {
@@ -222,30 +240,6 @@ export default function CreateJobPage() {
 
                 <FormField
                   control={form.control}
-                  name="isPrivateResidentialProperty"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">
-                          Private residential property
-                        </FormLabel>
-                        <FormDescription>
-                          Required to indicate if this cleanup is on private
-                          residential property.
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
                   name="executionMode"
                   render={({ field }) => (
                     <FormItem>
@@ -276,6 +270,58 @@ export default function CreateJobPage() {
                     </FormItem>
                   )}
                 />
+
+                {executionMode === "WORKER_EXECUTION" && (
+                  <FormField
+                    control={form.control}
+                    name="isPrivateResidentialProperty"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-base">
+                            Private residential property
+                          </FormLabel>
+                          <FormDescription>
+                            Required for worker execution jobs.
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {/* Private Job toggle - only for Leader Execution */}
+                {executionMode === "LEADER_EXECUTION" && (
+                  <FormField
+                    control={form.control}
+                    name="isPrivateJob"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-base">
+                            Private Job (Contributors Only)
+                          </FormLabel>
+                          <FormDescription>
+                            If enabled, only users who have contributed to this
+                            job can see it. Useful for private community work.
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <FormField
                   control={form.control}

@@ -68,6 +68,41 @@ export const authAPI = {
     const response = await api.patch("/user", data);
     return response.data;
   },
+
+  // OTP Authentication
+  sendOTP: async (phone: string) => {
+    const response = await api.post("/auth/send-otp", { phone });
+    return response.data;
+  },
+
+  verifyLoginOTP: async (phone: string, otp: string) => {
+    const response = await api.post("/auth/verify-login-otp", { phone, otp });
+    if (response.data.token) {
+      await AsyncStorage.setItem("auth_token", response.data.token);
+    }
+    return response.data;
+  },
+
+  verifyRegisterOTP: async (
+    phone: string,
+    otp: string,
+    userData: {
+      username: string;
+      password: string;
+      name: string;
+      phone: string;
+      role: string;
+    },
+  ) => {
+    const response = await api.post("/auth/verify-register-otp", {
+      otp,
+      ...userData,
+    });
+    if (response.data.token) {
+      await AsyncStorage.setItem("auth_token", response.data.token);
+    }
+    return response.data;
+  },
 };
 
 // Jobs API

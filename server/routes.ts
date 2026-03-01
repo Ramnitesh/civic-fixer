@@ -390,6 +390,52 @@ export async function registerRoutes(
     }
 
     let filtered = await storage.getJobs();
+
+    // Filter private jobs: leader execution jobs with isPrivateJob=true
+    // should only be visible to contributors or the job leader
+    if (req.isAuthenticated()) {
+      const userId = req.user!.id;
+      filtered = filtered.filter((job) => {
+        // Always show jobs that are not private
+        if (!job.isPrivateJob) return true;
+        // Show to job leader
+        if (job.leaderId === userId) return true;
+        // Show to contributors
+        return false; // Will check below if user contributed
+      });
+
+      // For private leader execution jobs, check if user is a contributor
+      const privateJobIds = filtered
+        .filter((j) => j.isPrivateJob && j.leaderId !== userId)
+        .map((j) => j.id);
+
+      if (privateJobIds.length > 0) {
+        const allContributions = await Promise.all(
+          privateJobIds.map(async (jobId) => {
+            const contributions = await storage.getContributionsByJob(jobId);
+            return {
+              jobId,
+              hasContributed: contributions.some((c) => c.userId === userId),
+            };
+          }),
+        );
+
+        const contributorJobIds = allContributions
+          .filter((c) => c.hasContributed)
+          .map((c) => c.jobId);
+
+        // Add contributor's private jobs to filtered list
+        const userPrivateJobs = await storage.getJobs();
+        const additionalJobs = userPrivateJobs.filter((j) =>
+          contributorJobIds.includes(j.id),
+        );
+        filtered = [...filtered, ...additionalJobs];
+      }
+    } else {
+      // Not authenticated - hide all private jobs
+      filtered = filtered.filter((job) => !job.isPrivateJob);
+    }
+
     if (req.isAuthenticated() && req.user?.role === "WORKER") {
       filtered = filtered.filter(
         (job) => job.executionMode === "WORKER_EXECUTION",
@@ -1662,6 +1708,165 @@ export async function registerRoutes(
 
     const withdrawals = await storage.getWithdrawalRequests(req.user!.id);
     res.json(withdrawals);
+  });
+
+  // =====================
+  // OTP AUTHENTICATION ROUTES
+  // =====================
+
+  // Store OTPs in memory (in production, use Redis or database)
+  const otpStore: Map<
+    string,
+    { otp: string; expiresAt: number; purpose: string }
+  > = new Map();
+
+  // Generate random 6-digit OTP
+  function generateOTP(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  // Send OTP to phone number
+  app.post("/api/auth/send-otp", async (req, res) => {
+    const { phone } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({ message: "Phone number is required" });
+    }
+
+    // Generate OTP
+    const otp = generateOTP();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    // Store OTP (in production, integrate with SMS provider like Twilio)
+    otpStore.set(phone, { otp, expiresAt, purpose: "auth" });
+
+    // In development, log the OTP
+    console.log(`[OTP] OTP for ${phone}: ${otp}`);
+
+    // TODO: Integrate with SMS provider to actually send SMS
+    // For now, return success
+    res.json({
+      message: "OTP sent successfully",
+      // Remove this in production - only for testing
+      devOtp: otp,
+    });
+  });
+
+  // Verify Login OTP
+  app.post("/api/auth/verify-login-otp", async (req, res) => {
+    const { phone, otp } = req.body;
+
+    if (!phone || !otp) {
+      return res.status(400).json({ message: "Phone and OTP are required" });
+    }
+
+    const stored = otpStore.get(phone);
+    if (!stored) {
+      return res.status(400).json({ message: "OTP not sent or expired" });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(phone);
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    if (stored.otp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    // OTP valid - find or create user
+    let user = await storage.getUserByPhone(phone);
+
+    if (!user) {
+      // For login, user must exist - create temp user for demo
+      const hashedPassword = await hashPassword("otp_" + Date.now());
+      user = await storage.createUser({
+        username: phone,
+        password: hashedPassword,
+        name: "User " + phone.slice(-4),
+        phone: phone,
+        role: "MEMBER",
+      });
+    }
+
+    // Clear OTP
+    otpStore.delete(phone);
+
+    // Create session
+    req.login(user, (err) => {
+      if (err) {
+        return res.status(500).json({ message: "Login failed" });
+      }
+      return res.json({
+        message: "Login successful",
+        user: {
+          id: user.id,
+          username: user.username,
+          name: user.name,
+          role: user.role,
+        },
+      });
+    });
+  });
+
+  // Verify Registration OTP
+  app.post("/api/auth/verify-register-otp", async (req, res) => {
+    const { phone, otp, name, role } = req.body;
+
+    if (!phone || !otp) {
+      return res.status(400).json({ message: "Phone and OTP are required" });
+    }
+
+    const stored = otpStore.get(phone);
+    if (!stored) {
+      return res.status(400).json({ message: "OTP not sent or expired" });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(phone);
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    if (stored.otp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    // Check if user already exists
+    const existingUser = await storage.getUserByPhone(phone);
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ message: "User already exists with this phone" });
+    }
+
+    // Create new user
+    const hashedPassword = await hashPassword("otp_" + Date.now());
+    const user = await storage.createUser({
+      username: phone,
+      password: hashedPassword,
+      name: name || "User " + phone.slice(-4),
+      phone: phone,
+      role: role || "MEMBER",
+    });
+
+    // Clear OTP
+    otpStore.delete(phone);
+
+    // Create session
+    req.login(user, (err) => {
+      if (err) {
+        return res.status(500).json({ message: "Registration failed" });
+      }
+      return res.json({
+        message: "Registration successful",
+        user: {
+          id: user.id,
+          username: user.username,
+          name: user.name,
+          role: user.role,
+        },
+      });
+    });
   });
 
   return httpServer;

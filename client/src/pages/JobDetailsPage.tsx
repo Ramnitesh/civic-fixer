@@ -101,6 +101,7 @@ export default function JobDetailsPage() {
   const [editLocation, setEditLocation] = useState("");
   const [editTargetAmount, setEditTargetAmount] = useState("");
   const [editPrivateProperty, setEditPrivateProperty] = useState(false);
+  const [editPrivateJob, setEditPrivateJob] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const { data: ledger } = useQuery({
@@ -125,6 +126,7 @@ export default function JobDetailsPage() {
     setEditLocation(job.location);
     setEditTargetAmount(String(job.targetAmount));
     setEditPrivateProperty(Boolean(job.isPrivateResidentialProperty));
+    setEditPrivateJob(Boolean(job.isPrivateJob));
   }, [job]);
 
   useEffect(() => {
@@ -2034,32 +2036,55 @@ export default function JobDetailsPage() {
                 placeholder="Target amount"
               />
             </div>
-            <div className="flex items-center justify-between rounded border p-3">
-              <span className="text-sm">Private residential property</span>
-              <Switch
-                checked={editPrivateProperty}
-                onCheckedChange={setEditPrivateProperty}
-              />
-            </div>
+            {/* Show Private residential property for Worker Execution */}
+            {job?.executionMode === "WORKER_EXECUTION" && (
+              <div className="flex items-center justify-between rounded border p-3">
+                <span className="text-sm">Private residential property</span>
+                <Switch
+                  checked={editPrivateProperty}
+                  onCheckedChange={setEditPrivateProperty}
+                />
+              </div>
+            )}
+
+            {/* Show Private Job (Contributors Only) for Leader Execution */}
+            {job?.executionMode === "LEADER_EXECUTION" && (
+              <div className="flex items-center justify-between rounded border p-3">
+                <span className="text-sm">Private Job (Contributors Only)</span>
+                <Switch
+                  checked={editPrivateJob}
+                  onCheckedChange={setEditPrivateJob}
+                />
+              </div>
+            )}
+
             <Button
               className="w-full"
               disabled={isUpdatingJob}
               onClick={() => {
-                updateJob(
-                  {
-                    id,
-                    title: editTitle,
-                    description: editDescription,
-                    location: editLocation,
-                    targetAmount: Number(editTargetAmount),
-                    isPrivateResidentialProperty: editPrivateProperty,
+                const updates: any = {
+                  id,
+                  title: editTitle,
+                  description: editDescription,
+                  location: editLocation,
+                  targetAmount: Number(editTargetAmount),
+                };
+
+                // Only update private property for Worker Execution
+                if (job?.executionMode === "WORKER_EXECUTION") {
+                  updates.isPrivateResidentialProperty = editPrivateProperty;
+                }
+
+                // Only update private job for Leader Execution
+                if (job?.executionMode === "LEADER_EXECUTION") {
+                  updates.isPrivateJob = editPrivateJob;
+                }
+
+                updateJob(updates, {
+                  onSuccess: () => {
+                    setShowEditJobModal(false);
                   },
-                  {
-                    onSuccess: () => {
-                      setShowEditJobModal(false);
-                    },
-                  },
-                );
+                });
               }}
             >
               Save Changes

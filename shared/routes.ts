@@ -26,6 +26,7 @@ const createJobInput = z.object({
   location: z.string().min(1),
   targetAmount: z.number().positive(),
   isPrivateResidentialProperty: z.boolean(),
+  isPrivateJob: z.boolean().optional(),
   executionMode: z.enum(["WORKER_EXECUTION", "LEADER_EXECUTION"]),
   imageUrl: z.string().url().optional(),
 });
@@ -170,6 +171,7 @@ export const api = {
           location: z.string().min(1).optional(),
           targetAmount: z.number().positive().optional(),
           isPrivateResidentialProperty: z.boolean().optional(),
+          isPrivateJob: z.boolean().optional(),
           status: z
             .enum([
               "FUNDING_OPEN",
