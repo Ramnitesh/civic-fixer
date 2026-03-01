@@ -49,7 +49,7 @@ export default function AuthPage() {
   }
 
   const handleSendOTP = async (forLogin: boolean) => {
-    if (!phone || phone.length < 10) {
+    if (!phone || phone.length != 10) {
       toast({
         title: "Error",
         description: "Please enter a valid phone number",
@@ -66,7 +66,10 @@ export default function AuthPage() {
       const response = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({
+          phone,
+          mode: forLogin ? "login" : "register",
+        }),
       });
 
       const data = await response.json();

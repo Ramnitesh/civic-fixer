@@ -19,7 +19,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(), // Acts as login identifier (phone/email)
   password: text("password").notNull(),
   name: text("name").notNull(),
-  phone: text("phone").notNull(),
+  phone: text("phone").notNull().unique(),
   role: text("role", {
     enum: ["MEMBER", "LEADER", "CONTRIBUTOR", "WORKER", "ADMIN"],
   })

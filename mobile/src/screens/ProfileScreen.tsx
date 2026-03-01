@@ -31,13 +31,11 @@ export default function ProfileScreen() {
 
   // Editable fields
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (user) {
       setName(user.name || "");
-      setPhone(user.phone || "");
     }
   }, [user]);
 
@@ -87,7 +85,7 @@ export default function ProfileScreen() {
 
     try {
       setIsSaving(true);
-      await authAPI.updateProfile({ name: name.trim(), phone: phone.trim() });
+      await authAPI.updateProfile({ name: name.trim() });
       await refreshUser();
       setIsEditing(false);
       Alert.alert("Success", "Profile updated successfully!");
@@ -162,7 +160,6 @@ export default function ProfileScreen() {
                   style={styles.cancelButton}
                   onPress={() => {
                     setName(user.name || "");
-                    setPhone(user.phone || "");
                     setIsEditing(false);
                   }}
                 >
@@ -200,17 +197,7 @@ export default function ProfileScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Phone</Text>
-            {isEditing ? (
-              <TextInput
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Enter your phone number"
-                keyboardType="phone-pad"
-              />
-            ) : (
-              <Text style={styles.valueText}>{user.phone || "Not added"}</Text>
-            )}
+            <Text style={styles.valueText}>{user.phone || "Not added"}</Text>
           </View>
 
           <View style={styles.inputGroup}>

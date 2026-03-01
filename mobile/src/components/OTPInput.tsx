@@ -147,7 +147,7 @@ export default function OTPInput({
 
   const handleResend = async () => {
     try {
-      await authAPI.sendOTP(phone);
+      await authAPI.sendOTP(phone, isLogin ? "login" : "register");
       setResendTimer(30);
       setResendDisabled(true);
       setOtp(["", "", "", "", "", ""]);

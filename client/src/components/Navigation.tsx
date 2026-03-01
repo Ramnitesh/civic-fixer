@@ -30,7 +30,6 @@ export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
   const [username, setUsername] = useState("");
   const [availability, setAvailability] = useState("");
   const [skillTags, setSkillTags] = useState("");
@@ -38,7 +37,6 @@ export function Navigation() {
   useEffect(() => {
     if (!user) return;
     setName(user.name ?? "");
-    setPhone(user.phone ?? "");
     setUsername(user.username ?? "");
     setAvailability(user.availability ?? "");
     setSkillTags(
@@ -161,8 +159,9 @@ export function Navigation() {
                       />
                       <Input
                         placeholder="Phone"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
+                        value={user.phone || ""}
+                        disabled
+                        className="bg-muted"
                       />
                       {user?.role === "WORKER" && (
                         <>
@@ -185,7 +184,6 @@ export function Navigation() {
                           updateProfile(
                             {
                               name: name.trim() || undefined,
-                              phone: phone.trim() || undefined,
                               ...(user?.role === "WORKER" && {
                                 availability: availability.trim() || undefined,
                                 skillTags: skillTags
@@ -267,9 +265,10 @@ export function Navigation() {
                       </Avatar>
                       <div>
                         <p className="font-semibold">{user.name}</p>
-                        <p className="text-sm text-muted-foreground capitalize">
-                          {user.role}
-                        </p>
+                        <p
+                          className="text-sm text-muted                          {user.role}
+                        -foreground capitalize"
+                        ></p>
                       </div>
                     </div>
                     <NavLink href="/dashboard" icon={Home}>

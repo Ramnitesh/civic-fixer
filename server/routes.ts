@@ -1727,10 +1727,26 @@ export async function registerRoutes(
 
   // Send OTP to phone number
   app.post("/api/auth/send-otp", async (req, res) => {
-    const { phone } = req.body;
+    const { phone, mode } = req.body;
 
     if (!phone) {
       return res.status(400).json({ message: "Phone number is required" });
+    }
+
+    // Check if user exists
+    const existingUser = await storage.getUserByPhone(phone);
+    console.log("Existing user for phone", phone, existingUser, mode);
+
+    if (mode === "register" && existingUser) {
+      return res.status(400).json({
+        message: "User already exists with this phone. Please login instead.",
+      });
+    }
+
+    if (mode === "login" && !existingUser) {
+      return res
+        .status(400)
+        .json({ message: "User does not exist. Please register first." });
     }
 
     // Generate OTP
@@ -1774,19 +1790,15 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Invalid OTP" });
     }
 
-    // OTP valid - find or create user
+    // OTP valid - find user by phone
     let user = await storage.getUserByPhone(phone);
 
     if (!user) {
-      // For login, user must exist - create temp user for demo
-      const hashedPassword = await hashPassword("otp_" + Date.now());
-      user = await storage.createUser({
-        username: phone,
-        password: hashedPassword,
-        name: "User " + phone.slice(-4),
-        phone: phone,
-        role: "MEMBER",
-      });
+      // User doesn't exist - login not allowed
+      otpStore.delete(phone);
+      return res
+        .status(400)
+        .json({ message: "User does not exist. Please register first." });
     }
 
     // Clear OTP

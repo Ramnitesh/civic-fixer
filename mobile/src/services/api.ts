@@ -70,8 +70,8 @@ export const authAPI = {
   },
 
   // OTP Authentication
-  sendOTP: async (phone: string) => {
-    const response = await api.post("/auth/send-otp", { phone });
+  sendOTP: async (phone: string, mode: string) => {
+    const response = await api.post("/auth/send-otp", { phone, mode });
     return response.data;
   },
 
