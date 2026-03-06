@@ -15,9 +15,11 @@ import { colors } from "../utils/colors";
 import { walletAPI } from "../services/api";
 import { Wallet, Transaction, Withdrawal } from "../types";
 import { useAuth } from "../navigation/AuthContext";
+import { useNavigation } from "@react-navigation/native";
 
 export default function WalletScreen() {
   const { user } = useAuth();
+  const navigation = useNavigation<any>();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
@@ -27,6 +29,32 @@ export default function WalletScreen() {
   );
   const [showAddMoney, setShowAddMoney] = useState(false);
   const [addMoneyAmount, setAddMoneyAmount] = useState("");
+  const [addMoneyError, setAddMoneyError] = useState("");
+  const [isAddingMoney, setIsAddingMoney] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawError, setWithdrawError] = useState("");
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  const validateAmount = (amount: string) => {
+    if (!amount.trim()) {
+      return "Amount is required";
+    }
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount)) {
+      return "Please enter a valid number";
+    }
+    if (numAmount <= 0) {
+      return "Amount must be greater than 0";
+    }
+    if (numAmount < 10) {
+      return "Minimum amount is ₹10";
+    }
+    if (numAmount > 100000) {
+      return "Maximum amount is ₹1,00,000";
+    }
+    return "";
+  };
 
   const fetchWallet = async () => {
     try {
@@ -54,20 +82,34 @@ export default function WalletScreen() {
   }, [user]);
 
   const handleAddMoney = async () => {
-    if (!addMoneyAmount || parseFloat(addMoneyAmount) <= 0) {
-      Alert.alert("Error", "Please enter a valid amount");
+    const error = validateAmount(addMoneyAmount);
+    if (error) {
+      setAddMoneyError(error);
       return;
     }
 
     try {
+      setIsAddingMoney(true);
       await walletAPI.addMoney(parseFloat(addMoneyAmount));
       Alert.alert("Success", "Money added successfully!");
       setAddMoneyAmount("");
+      setAddMoneyError("");
       setShowAddMoney(false);
       fetchWallet();
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to add money");
+    } finally {
+      setIsAddingMoney(false);
     }
+  };
+
+  const handleWithdraw = () => {
+    // Show alert that bank account needs to be set up
+    Alert.alert(
+      "Bank Account Required",
+      "Please set up your bank account in your profile to withdraw funds.",
+      [{ text: "OK" }],
+    );
   };
 
   const getTransactionIcon = (type: string) => {
@@ -147,6 +189,12 @@ export default function WalletScreen() {
           <Text style={styles.notLoggedInText}>
             Please login to view your wallet
           </Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => navigation.navigate("Auth")}
+          >
+            <Text style={styles.loginButtonText}>Login</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -210,25 +258,52 @@ export default function WalletScreen() {
             >
               <Text style={styles.addMoneyButtonText}>+ Add Money</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.withdrawButton}>
+            <TouchableOpacity
+              style={styles.withdrawButton}
+              onPress={handleWithdraw}
+            >
               <Text style={styles.withdrawButtonText}>Withdraw</Text>
             </TouchableOpacity>
           </View>
 
           {showAddMoney && (
             <View style={styles.addMoneyForm}>
-              <TextInput
-                style={styles.addMoneyInput}
-                placeholder="Enter amount"
-                value={addMoneyAmount}
-                onChangeText={setAddMoneyAmount}
-                keyboardType="numeric"
-              />
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={[
+                    styles.addMoneyInput,
+                    addMoneyError && styles.addMoneyInputError,
+                  ]}
+                  maxLength={6}
+                  placeholder="Enter amount (₹)"
+                  value={addMoneyAmount}
+                  onChangeText={(text) => {
+                    const filtered = text.replace(/[^0-9.]/g, "");
+                    setAddMoneyAmount(filtered);
+                    if (addMoneyError) setAddMoneyError("");
+                  }}
+                  keyboardType="decimal-pad"
+                />
+                {addMoneyError && (
+                  <Text style={styles.addMoneyErrorText}>{addMoneyError}</Text>
+                )}
+                {addMoneyAmount && !addMoneyError && (
+                  <Text style={styles.addMoneyHint}>
+                    ₹{parseFloat(addMoneyAmount).toLocaleString("en-IN")}
+                  </Text>
+                )}
+              </View>
               <TouchableOpacity
-                style={styles.confirmButton}
+                style={[
+                  styles.confirmButton,
+                  isAddingMoney && styles.confirmButtonDisabled,
+                ]}
                 onPress={handleAddMoney}
+                disabled={isAddingMoney}
               >
-                <Text style={styles.confirmButtonText}>Add</Text>
+                <Text style={styles.confirmButtonText}>
+                  {isAddingMoney ? "Adding..." : "Add"}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -286,7 +361,11 @@ export default function WalletScreen() {
                   <Text style={styles.listItemTitle}>{tx.type}</Text>
                   <Text style={styles.listItemDescription}>
                     {tx.description ||
-                      new Date(tx.createdAt).toLocaleDateString()}
+                      new Date(tx.createdAt).toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
                   </Text>
                 </View>
                 <Text
@@ -321,7 +400,12 @@ export default function WalletScreen() {
               <View style={styles.listItemContent}>
                 <Text style={styles.listItemTitle}>₹{w.amount}</Text>
                 <Text style={styles.listItemDescription}>
-                  {w.bankAccount} • {new Date(w.createdAt).toLocaleDateString()}
+                  {w.bankAccount} •{" "}
+                  {new Date(w.createdAt).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
                 </Text>
               </View>
               <Text
@@ -347,8 +431,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
+    gap: 16,
   },
   notLoggedInText: { fontSize: 16, color: colors.muted },
+  loginButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+  },
+  loginButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   balanceCard: {
     backgroundColor: colors.primary,
@@ -410,19 +506,48 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   withdrawButtonText: { color: "white", fontSize: 14, fontWeight: "600" },
-  addMoneyForm: { flexDirection: "row", gap: 12, marginTop: 16 },
-  addMoneyInput: {
+  addMoneyForm: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+    alignItems: "center",
+  },
+  inputWrapper: {
     flex: 1,
+  },
+  addMoneyInput: {
+    width: "100%",
     backgroundColor: "white",
     borderRadius: 12,
     padding: 14,
     fontSize: 16,
+    color: colors.foreground,
+  },
+  addMoneyInputError: {
+    borderWidth: 2,
+    borderColor: colors.destructive,
+  },
+  addMoneyErrorText: {
+    color: colors.destructive,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  addMoneyHint: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 4,
   },
   confirmButton: {
     backgroundColor: colors.primaryDark,
+    paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
     justifyContent: "center",
+    minWidth: 80,
+  },
+  confirmButtonDisabled: {
+    opacity: 0.6,
   },
   confirmButtonText: { color: "white", fontSize: 14, fontWeight: "600" },
   tabs: {

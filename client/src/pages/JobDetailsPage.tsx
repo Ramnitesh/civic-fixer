@@ -36,7 +36,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export default function JobDetailsPage() {
+export default function PoolDetailsPage() {
   const { id: idParam } = useParams();
   const id = Number(idParam);
   const { user } = useAuth();
@@ -858,7 +858,11 @@ export default function JobDetailsPage() {
               <span className="inline-flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
                 {job.createdAt
-                  ? new Date(job.createdAt).toLocaleDateString()
+                  ? new Date(job.createdAt).toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
                   : ""}
               </span>
               <span className="inline-flex items-center gap-1">
@@ -883,14 +887,14 @@ export default function JobDetailsPage() {
           <div className="md:col-span-2 space-y-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle>Job Details</CardTitle>
+                <CardTitle>Pool Details</CardTitle>
                 {canEditJob && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setShowEditJobModal(true)}
                   >
-                    Edit Job
+                    Edit Pool
                   </Button>
                 )}
               </CardHeader>
@@ -1502,7 +1506,7 @@ export default function JobDetailsPage() {
                             })
                           }
                         >
-                          Apply for Job
+                          Apply for Pool
                         </Button>
                       </>
                     )}
@@ -1668,7 +1672,7 @@ export default function JobDetailsPage() {
                             );
                           }}
                         >
-                          Submit Job for Leader Review
+                          Submit Pool for Leader Review
                         </Button>
                         <p className="text-xs text-muted-foreground">
                           Message: Once you submit, the leader will be notified
@@ -1871,7 +1875,7 @@ export default function JobDetailsPage() {
               <a href={whatsappUrl} target="_blank" rel="noreferrer">
                 <Button className="w-full" variant="outline">
                   <Share2 className="w-4 h-4 mr-2" />
-                  Share Job
+                  Share Pool
                 </Button>
               </a>
             )}
@@ -1979,7 +1983,11 @@ export default function JobDetailsPage() {
                           <p className="text-xs text-muted-foreground">
                             {new Date(
                               contributor.contributionDate,
-                            ).toLocaleDateString()}
+                            ).toLocaleDateString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
                           </p>
                         )}
                       </div>
@@ -2000,7 +2008,7 @@ export default function JobDetailsPage() {
       <Dialog open={showEditJobModal} onOpenChange={setShowEditJobModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Job</DialogTitle>
+            <DialogTitle>Edit Pool</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -2050,7 +2058,9 @@ export default function JobDetailsPage() {
             {/* Show Private Job (Contributors Only) for Leader Execution */}
             {job?.executionMode === "LEADER_EXECUTION" && (
               <div className="flex items-center justify-between rounded border p-3">
-                <span className="text-sm">Private Job (Contributors Only)</span>
+                <span className="text-sm">
+                  Private Pool (Contributors Only)
+                </span>
                 <Switch
                   checked={editPrivateJob}
                   onCheckedChange={setEditPrivateJob}

@@ -46,7 +46,7 @@ const formSchema = insertJobSchema.extend({
   imageUrl: z.string().url().optional(),
 });
 
-export default function CreateJobPage() {
+export default function CreatePoolPage() {
   const { mutate: createJob, isPending } = useCreateJob();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -174,7 +174,7 @@ export default function CreateJobPage() {
         <Card className="border-border/50 shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl font-display">
-              Create a New Job
+              Create a New Pool
             </CardTitle>
             <CardDescription>
               Identify an issue in your community and mobilize funding to fix
@@ -192,7 +192,7 @@ export default function CreateJobPage() {
                   name="title"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Job Title</FormLabel>
+                      <FormLabel>Pool Title</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="e.g. Park Cleanup on 5th St."
@@ -305,11 +305,11 @@ export default function CreateJobPage() {
                       <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                         <div className="space-y-0.5">
                           <FormLabel className="text-base">
-                            Private Job (Contributors Only)
+                            Private Pool (Contributors Only)
                           </FormLabel>
                           <FormDescription>
                             If enabled, only users who have contributed to this
-                            job can see it. Useful for private community work.
+                            pool can see it. Useful for private community work.
                           </FormDescription>
                         </div>
                         <FormControl>
@@ -346,7 +346,7 @@ export default function CreateJobPage() {
                   name="imageUrl"
                   render={() => (
                     <FormItem>
-                      <FormLabel>Job Image (optional)</FormLabel>
+                      <FormLabel>Pool Image (optional)</FormLabel>
                       <FormControl>
                         <Input
                           type="file"
@@ -357,7 +357,7 @@ export default function CreateJobPage() {
                         />
                       </FormControl>
                       <FormDescription>
-                        Upload a cover image to represent this job.
+                        Upload a cover image to represent this pool.
                       </FormDescription>
                     </FormItem>
                   )}
@@ -371,7 +371,7 @@ export default function CreateJobPage() {
                   {isPending || isUploadingImage ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   ) : null}
-                  {isUploadingImage ? "Uploading image..." : "Publish Job"}
+                  {isUploadingImage ? "Uploading image..." : "Publish Pool"}
                 </Button>
               </form>
             </Form>

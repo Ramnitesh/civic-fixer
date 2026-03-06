@@ -16,7 +16,6 @@ import { Job } from "../types";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import Feather from "@expo/vector-icons/Feather";
 import logoImage from "../../assets/icon.png";
 
 export default function HomeScreen() {
@@ -92,42 +91,17 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Search Bar */}
+        {/* Search Bar - Opens PoolsListScreen for searching */}
         <TouchableOpacity
           style={styles.searchBar}
-          onPress={() => navigation.navigate("Jobs")}
+          onPress={() => navigation.navigate("PoolsListScreen")}
         >
           <FontAwesome name="search" size={20} color={colors.muted} />
-          <Text style={styles.searchText}>Search jobs...</Text>
+          <Text style={styles.searchText}>Search pools...</Text>
         </TouchableOpacity>
-
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => navigation.navigate("Jobs")}
-          >
-            <FontAwesome name="briefcase" size={24} color={colors.primary} />
-            <Text style={styles.actionText}>My Jobs</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => navigation.navigate("CreateJob")}
-          >
-            <Feather name="trending-up" size={24} color={colors.success} />
-            <Text style={styles.actionText}>Start New</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* Recent Jobs */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Projects</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Jobs")}>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-
           {isLoading ? (
             <ActivityIndicator size="small" color={colors.primary} />
           ) : recentJobs.length === 0 ? (
@@ -140,7 +114,7 @@ export default function HomeScreen() {
                 key={job.id}
                 style={styles.jobCard}
                 onPress={() =>
-                  navigation.navigate("JobDetails", { jobId: job.id })
+                  navigation.navigate("PoolDetails", { jobId: job.id })
                 }
               >
                 <View style={styles.jobImageContainer}>
@@ -152,7 +126,7 @@ export default function HomeScreen() {
                   ) : (
                     <View style={styles.jobImagePlaceholder}>
                       <FontAwesome
-                        name="briefcase"
+                        name="group"
                         size={24}
                         color={colors.muted}
                       />

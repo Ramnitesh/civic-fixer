@@ -6,21 +6,23 @@ import { View, ActivityIndicator, StyleSheet } from "react-native";
 
 // Screens
 import HomeScreen from "../screens/HomeScreen";
-import JobsListScreen from "../screens/JobsListScreen";
-import JobDetailsScreen from "../screens/JobDetailsScreen";
+import PoolsListScreen from "../screens/PoolsListScreen";
+import PoolDetailsScreen from "../screens/PoolDetailsScreen";
 import AuthScreen from "../screens/AuthScreen";
 import ProfileScreen from "../screens/ProfileScreen";
-import CreateJobScreen from "../screens/CreateJobScreen";
+import CreatePoolScreen from "../screens/CreatePoolScreen";
 import WalletScreen from "../screens/WalletScreen";
 import ContributionsScreen from "../screens/ContributionsScreen";
-import MyJobsScreen from "../screens/MyJobsScreen";
+import MyPoolsScreen from "../screens/MyPoolsScreen";
 import HelpScreen from "../screens/HelpScreen";
+import BankAccountScreen from "../screens/BankAccountScreen";
 
 // Auth Context - import from AuthContext
 import { useAuth, AuthProvider } from "./AuthContext";
 
 // Icons
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { colors } from "../utils/colors";
 
 const Stack = createNativeStackNavigator();
@@ -38,6 +40,9 @@ function LoadingScreen() {
 // Tab Navigator for authenticated users
 function TabNavigator() {
   const { user } = useAuth();
+
+  // Consistent icon size for all tabs
+  const ICON_SIZE = 22;
 
   return (
     <Tab.Navigator
@@ -58,28 +63,52 @@ function TabNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome name="home" color={color} size={size} />
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="home" color={color} size={ICON_SIZE} />
           ),
           headerShown: false,
         }}
       />
       <Tab.Screen
-        name="Jobs"
-        component={JobsListScreen}
+        name="My Pools"
+        component={MyPoolsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome name="briefcase" color={color} size={size} />
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="group" color={color} size={ICON_SIZE - 3} />
           ),
-          headerTitle: "My Jobs",
+          headerTitle: "My Pools",
+        }}
+      />
+      <Tab.Screen
+        name="New Pool"
+        component={CreatePoolScreen}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <MaterialCommunityIcons
+              name="account-multiple-plus"
+              color={color}
+              size={ICON_SIZE + 5} // Slightly larger icon for emphasis
+            />
+          ),
+          headerTitle: "Create Pool",
+        }}
+      />
+      <Tab.Screen
+        name="Contributions"
+        component={ContributionsScreen}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="heart" color={color} size={ICON_SIZE} />
+          ),
+          headerTitle: "Contributed Pools",
         }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome name="user" color={color} size={size} />
+          tabBarIcon: ({ color }) => (
+            <FontAwesome name="user" color={color} size={ICON_SIZE} />
           ),
           headerTitle: "Profile",
         }}
@@ -88,7 +117,7 @@ function TabNavigator() {
   );
 }
 
-// Main Stack Navigator
+// Main Stack Navigator - always shows main app, auth is accessible via navigation
 function MainNavigator() {
   const { user, isLoading } = useAuth();
 
@@ -106,24 +135,24 @@ function MainNavigator() {
       }}
     >
       <Stack.Screen
-        name="Back"
+        name="Main"
         component={TabNavigator}
         options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="JobDetails"
-        component={JobDetailsScreen}
-        options={{ headerTitle: "Job Details" }}
+        name="PoolsListScreen"
+        component={PoolsListScreen}
+        options={{ headerTitle: "Search Pools" }}
       />
       <Stack.Screen
-        name="CreateJob"
-        component={CreateJobScreen}
-        options={{ headerTitle: "Create Job" }}
+        name="PoolDetails"
+        component={PoolDetailsScreen}
+        options={{ headerTitle: "Pool Details" }}
       />
       <Stack.Screen
-        name="Auth"
-        component={AuthScreen}
-        options={{ headerShown: false }}
+        name="CreatePool"
+        component={CreatePoolScreen}
+        options={{ headerTitle: "Create Pool" }}
       />
       <Stack.Screen
         name="Wallet"
@@ -136,14 +165,24 @@ function MainNavigator() {
         options={{ headerTitle: "My Contributions" }}
       />
       <Stack.Screen
-        name="MyJobs"
-        component={MyJobsScreen}
-        options={{ headerTitle: "My Jobs" }}
+        name="MyPools"
+        component={MyPoolsScreen}
+        options={{ headerTitle: "My Pools" }}
       />
       <Stack.Screen
         name="Help"
         component={HelpScreen}
         options={{ headerTitle: "Help & Support" }}
+      />
+      <Stack.Screen
+        name="BankAccount"
+        component={BankAccountScreen}
+        options={{ headerTitle: "Bank Account" }}
+      />
+      <Stack.Screen
+        name="Auth"
+        component={AuthScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

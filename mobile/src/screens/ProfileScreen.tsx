@@ -34,12 +34,30 @@ export default function ProfileScreen() {
   // Editable fields
   const [name, setName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [nameError, setNameError] = useState("");
 
   useEffect(() => {
     if (user) {
       setName(user.name || "");
     }
   }, [user]);
+
+  const validateName = (value: string) => {
+    if (!value.trim()) {
+      return "Name is required";
+    }
+    if (value.trim().length < 2) {
+      return "Name must be at least 2 characters";
+    }
+    if (value.trim().length > 50) {
+      return "Name must be less than 50 characters";
+    }
+    // Check for valid characters (letters, spaces, and common name characters)
+    if (!/^[a-zA-Z\s'-]+$/.test(value.trim())) {
+      return "Name can only contain letters, spaces, hyphens, and apostrophes";
+    }
+    return "";
+  };
 
   const menuItems: MenuItem[] = [
     {
@@ -49,16 +67,10 @@ export default function ProfileScreen() {
       onPress: () => navigation.navigate("Wallet"),
     },
     {
-      id: "contributions",
-      title: "My Contributions",
-      icon: "heart",
-      onPress: () => navigation.navigate("Contributions"),
-    },
-    {
-      id: "jobs",
-      title: "My Jobs",
-      icon: "briefcase",
-      onPress: () => navigation.navigate("MyJobs"),
+      id: "bank",
+      title: "Bank Account",
+      icon: "university",
+      onPress: () => navigation.navigate("BankAccount"),
     },
     {
       id: "help",
@@ -80,8 +92,9 @@ export default function ProfileScreen() {
   }
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert("Error", "Name cannot be empty");
+    const error = validateName(name);
+    if (error) {
+      setNameError(error);
       return;
     }
 
@@ -90,6 +103,7 @@ export default function ProfileScreen() {
       await authAPI.updateProfile({ name: name.trim() });
       await refreshUser();
       setIsEditing(false);
+      setNameError("");
       Alert.alert("Success", "Profile updated successfully!");
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to update profile");
@@ -135,7 +149,10 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
@@ -186,12 +203,23 @@ export default function ProfileScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Name</Text>
             {isEditing ? (
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="Enter your name"
-              />
+              <>
+                <TextInput
+                  style={[styles.input, nameError && styles.inputError]}
+                  value={name}
+                  onChangeText={(text) => {
+                    setName(text);
+                    if (nameError) setNameError("");
+                  }}
+                  placeholder="Enter your name"
+                  maxLength={50}
+                />
+                {nameError ? (
+                  <Text style={styles.errorText}>{nameError}</Text>
+                ) : (
+                  <Text style={styles.charCount}>{name.length}/50</Text>
+                )}
+              </>
             ) : (
               <Text style={styles.valueText}>{user.name}</Text>
             )}
@@ -231,11 +259,14 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <FontAwesome name="sign-out" size={18} color={colors.destructive} />
-          <Text style={styles.logoutButtonText}>Logout</Text>
-        </TouchableOpacity>
+        {/* Logout and Version */}
+        <View style={styles.footerSection}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <FontAwesome name="sign-out" size={18} color={colors.destructive} />
+            <Text style={styles.logoutButtonText}>Logout</Text>
+          </TouchableOpacity>
+          <Text style={styles.versionText}>Version 1.0.0</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -379,6 +410,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.foreground,
   },
+  inputError: {
+    borderColor: colors.destructive,
+    borderWidth: 2,
+  },
+  errorText: {
+    color: colors.destructive,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  charCount: {
+    color: colors.muted,
+    fontSize: 11,
+    textAlign: "right",
+    marginTop: 4,
+  },
   valueText: {
     fontSize: 16,
     color: colors.foreground,
@@ -435,5 +481,46 @@ const styles = StyleSheet.create({
     color: colors.destructive,
     fontSize: 16,
     fontWeight: "600",
+  },
+  bankSection: {
+    backgroundColor: colors.card,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  bankSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  saveBankButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  saveBankButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  footerSection: {
+    paddingBottom: 40,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "space-between",
+  },
+  versionText: {
+    textAlign: "center",
+    color: colors.muted,
+    fontSize: 12,
+    marginTop: 8,
   },
 });

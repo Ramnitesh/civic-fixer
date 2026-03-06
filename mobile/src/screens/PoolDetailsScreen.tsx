@@ -37,6 +37,34 @@ export default function JobDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [contributing, setContributing] = useState(false);
   const [contributionAmount, setContributionAmount] = useState("");
+  const [contributionError, setContributionError] = useState("");
+
+  const validateContribution = (amount: string) => {
+    if (!amount.trim()) {
+      return "Amount is required";
+    }
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount)) {
+      return "Please enter a valid number";
+    }
+    if (numAmount <= 0) {
+      return "Amount must be greater than 0";
+    }
+    if (numAmount < 10) {
+      return "Minimum contribution is ₹10";
+    }
+    if (numAmount > 100000) {
+      return "Maximum contribution is ₹1,00,000";
+    }
+    // Check if amount exceeds remaining funding
+    if (job) {
+      const remaining = job.targetAmount - job.collectedAmount;
+      if (numAmount > remaining) {
+        return `Maximum contribution is ₹${remaining.toLocaleString("en-IN")} (remaining)`;
+      }
+    }
+    return "";
+  };
 
   const fetchJob = async () => {
     try {
@@ -54,8 +82,9 @@ export default function JobDetailsScreen() {
   }, [jobId]);
 
   const handleContribute = async () => {
-    if (!contributionAmount || parseFloat(contributionAmount) <= 0) {
-      Alert.alert("Error", "Please enter a valid amount");
+    const error = validateContribution(contributionAmount);
+    if (error) {
+      setContributionError(error);
       return;
     }
 
@@ -64,6 +93,7 @@ export default function JobDetailsScreen() {
       await contributionsAPI.create(jobId, parseFloat(contributionAmount));
       Alert.alert("Success", "Thank you for your contribution!");
       setContributionAmount("");
+      setContributionError("");
       fetchJob();
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to contribute");
@@ -160,7 +190,7 @@ export default function JobDetailsScreen() {
               <FontAwesome name="user" size={20} color={colors.primary} />
             </View>
             <View style={styles.leaderInfo}>
-              <Text style={styles.leaderLabel}>Project Leader</Text>
+              <Text style={styles.leaderLabel}>Pool Owened By</Text>
               <Text style={styles.leaderName}>
                 {job.leader?.name || "Unknown"}
               </Text>
@@ -196,30 +226,52 @@ export default function JobDetailsScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Contribute</Text>
               {user ? (
-                <View style={styles.contributeCard}>
-                  <TextInput
-                    style={styles.contributeInput}
-                    placeholder="Enter amount"
-                    value={contributionAmount}
-                    onChangeText={setContributionAmount}
-                    keyboardType="numeric"
-                  />
-                  <TouchableOpacity
-                    style={[
-                      styles.contributeButton,
-                      contributing && styles.contributeButtonDisabled,
-                    ]}
-                    onPress={handleContribute}
-                    disabled={contributing}
-                  >
-                    {contributing ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : (
-                      <Text style={styles.contributeButtonText}>
-                        Contribute
+                <View>
+                  <View style={styles.contributeCard}>
+                    <TextInput
+                      style={[
+                        styles.contributeInput,
+                        contributionError && styles.contributeInputError,
+                      ]}
+                      maxLength={6}
+                      placeholder="Enter amount (₹)"
+                      value={contributionAmount}
+                      onChangeText={(text) => {
+                        const filtered = text.replace(/[^0-9.]/g, "");
+                        setContributionAmount(filtered);
+                        if (contributionError) setContributionError("");
+                      }}
+                      keyboardType="decimal-pad"
+                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.contributeButton,
+                        contributing && styles.contributeButtonDisabled,
+                      ]}
+                      onPress={handleContribute}
+                      disabled={contributing}
+                    >
+                      {contributing ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <Text style={styles.contributeButtonText}>
+                          Contribute
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  {contributionError ? (
+                    <Text style={styles.contributionErrorText}>
+                      {contributionError}
+                    </Text>
+                  ) : (
+                    contributionAmount && (
+                      <Text style={styles.contributionHint}>
+                        ₹
+                        {parseFloat(contributionAmount).toLocaleString("en-IN")}
                       </Text>
-                    )}
-                  </TouchableOpacity>
+                    )
+                  )}
                 </View>
               ) : (
                 <View style={styles.loginPrompt}>
@@ -273,7 +325,11 @@ export default function JobDetailsScreen() {
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Created</Text>
                 <Text style={styles.detailValue}>
-                  {new Date(job.createdAt).toLocaleDateString()}
+                  {new Date(job.createdAt).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
                 </Text>
               </View>
             </View>
@@ -469,6 +525,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     fontSize: 16,
+  },
+  contributeInputError: {
+    borderColor: colors.destructive,
+    borderWidth: 2,
+  },
+  contributionErrorText: {
+    color: colors.destructive,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  contributionHint: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 4,
   },
   contributeButton: {
     backgroundColor: colors.primary,

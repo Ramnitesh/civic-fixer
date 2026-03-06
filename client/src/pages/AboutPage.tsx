@@ -84,7 +84,7 @@ export default function AboutPage() {
                   1
                 </div>
                 <div>
-                  <h3 className="font-semibold text-foreground">Post a Job</h3>
+                  <h3 className="font-semibold text-foreground">Post a Pool</h3>
                   <p>
                     Anyone can post a civic issue that needs attention - from
                     potholes to park cleanups.
@@ -200,7 +200,7 @@ export default function AboutPage() {
               </Link>
               <Link href="/jobs">
                 <button className="border border-primary text-primary px-6 py-3 rounded-lg font-semibold hover:bg-primary/10 transition">
-                  Browse Jobs
+                  Browse Pools
                 </button>
               </Link>
             </div>

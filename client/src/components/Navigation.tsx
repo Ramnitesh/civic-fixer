@@ -86,12 +86,12 @@ export function Navigation() {
                 Dashboard
               </NavLink>
               <NavLink href="/jobs" icon={Briefcase}>
-                Browse Jobs
+                Browse Pools
               </NavLink>
             </>
           ) : (
             <NavLink href="/jobs" icon={Briefcase}>
-              Browse Jobs
+              Browse Pools
             </NavLink>
           )}
         </div>
@@ -274,7 +274,7 @@ export function Navigation() {
                       Dashboard
                     </NavLink>
                     <NavLink href="/jobs" icon={Briefcase}>
-                      Browse Jobs
+                      Browse Pools
                     </NavLink>
                     <NavLink href="/wallet" icon={Wallet}>
                       My Wallet
@@ -283,7 +283,7 @@ export function Navigation() {
                       user.role,
                     ) && (
                       <NavLink href="/create-job" icon={PlusCircle}>
-                        Create Job
+                        Create Pool
                       </NavLink>
                     )}
                     <Button
@@ -297,7 +297,7 @@ export function Navigation() {
                 ) : (
                   <>
                     <NavLink href="/jobs" icon={Briefcase}>
-                      Browse Jobs
+                      Browse Pools
                     </NavLink>
                     <div className="border-t my-2 pt-4 flex flex-col gap-2">
                       <Link href="/auth" onClick={() => setIsOpen(false)}>

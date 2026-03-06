@@ -90,7 +90,7 @@ export default function DashboardPage() {
           {["MEMBER", "LEADER", "CONTRIBUTOR", "ADMIN"].includes(user.role) && (
             <Link href="/create-job">
               <Button className="btn-primary gap-2">
-                <PlusCircle className="w-4 h-4" /> Create New Job
+                <PlusCircle className="w-4 h-4" /> Create New Pool
               </Button>
             </Link>
           )}
@@ -99,11 +99,11 @@ export default function DashboardPage() {
         {/* Active Jobs Section */}
         <div className="mb-6">
           <h2 className="text-xl font-bold mb-4 font-display">
-            Active Jobs ({jobs?.length || 0})
+            Active Pools ({jobs?.length || 0})
           </h2>
           {jobs?.length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed rounded-xl bg-muted/10">
-              <p className="text-muted-foreground">No active jobs found.</p>
+              <p className="text-muted-foreground">No active pools found.</p>
               {["MEMBER", "LEADER", "CONTRIBUTOR", "ADMIN"].includes(
                 user.role,
               ) && (

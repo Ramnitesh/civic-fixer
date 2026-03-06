@@ -19,6 +19,7 @@ import { useNavigation } from "@react-navigation/native";
 import { authAPI } from "../services/api";
 import OTPInput from "../components/OTPInput";
 import logoImage from "../../assets/icon.png";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 export default function AuthScreen() {
   const { setUserFromLogin } = useAuth();
@@ -33,13 +34,66 @@ export default function AuthScreen() {
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState("MEMBER");
 
+  // Validation errors
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+
   // OTP fields
   const [otpSent, setOtpSent] = useState(false);
 
+  const validatePhone = (phoneNumber: string) => {
+    if (!phoneNumber.trim()) {
+      return "Phone number is required";
+    }
+    // Remove all non-digit characters
+    const digitsOnly = phoneNumber.replace(/\D/g, "");
+    if (digitsOnly.length < 10) {
+      return "Phone number must be at least 10 digits";
+    }
+    if (digitsOnly.length > 15) {
+      return "Phone number must be less than 15 digits";
+    }
+    return "";
+  };
+
+  const validateName = (nameValue: string) => {
+    if (!nameValue.trim()) {
+      return "Name is required";
+    }
+    if (nameValue.trim().length < 2) {
+      return "Name must be at least 2 characters";
+    }
+    if (nameValue.trim().length > 50) {
+      return "Name must be less than 50 characters";
+    }
+    if (!/^[a-zA-Z\s'-]+$/.test(nameValue.trim())) {
+      return "Name can only contain letters, spaces, hyphens, and apostrophes";
+    }
+    return "";
+  };
+
+  const validateForm = () => {
+    const newErrors: { [key: string]: string } = {};
+
+    // Phone validation (required for both login and register)
+    const phoneError = validatePhone(phone);
+    if (phoneError) {
+      newErrors.phone = phoneError;
+    }
+
+    // Name validation (only required for registration)
+    if (!isLogin) {
+      const nameError = validateName(name);
+      if (nameError) {
+        newErrors.name = nameError;
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSendOTP = async () => {
-    // Validate phone number
-    if (!phone || phone.length < 10) {
-      Alert.alert("Error", "Please enter a valid phone number");
+    if (!validateForm()) {
       return;
     }
 
@@ -70,16 +124,11 @@ export default function AuthScreen() {
   };
 
   const handleSubmit = async () => {
-    // For OTP-based auth, send OTP first
-    if (!phone || phone.length < 10) {
-      Alert.alert("Error", "Please enter a valid phone number");
-      return;
-    }
     await handleSendOTP();
   };
 
   const handleOTPSuccess = () => {
-    // Navigate to main app
+    // Navigate back to previous screen after successful login/register
     if (navigation.canGoBack()) {
       navigation.goBack();
     }
@@ -89,6 +138,23 @@ export default function AuthScreen() {
     setOtpSent(false);
   };
 
+  const handlePhoneChange = (text: string) => {
+    setPhone(text);
+    if (errors.phone) {
+      setErrors({ ...errors, phone: "" });
+    }
+  };
+
+  const handleNameChange = (text: string) => {
+    setName(text);
+    if (errors.name) {
+      setErrors({ ...errors, name: "" });
+    }
+  };
+
+  // Check if we can go back (meaning user navigated here from another screen)
+  const canGoBack = navigation.canGoBack();
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -97,6 +163,21 @@ export default function AuthScreen() {
       >
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.content}>
+            {/* Back Button */}
+            {canGoBack && (
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+              >
+                <FontAwesome
+                  name="arrow-left"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.backButtonText}>Back</Text>
+              </TouchableOpacity>
+            )}
+
             {/* Header */}
             <View style={styles.header}>
               <Image source={logoImage} style={styles.logo} />
@@ -115,7 +196,10 @@ export default function AuthScreen() {
                 <View style={styles.tabs}>
                   <TouchableOpacity
                     style={[styles.tab, isLogin && styles.tabActive]}
-                    onPress={() => setIsLogin(true)}
+                    onPress={() => {
+                      setIsLogin(true);
+                      setErrors({});
+                    }}
                   >
                     <Text
                       style={[styles.tabText, isLogin && styles.tabTextActive]}
@@ -125,7 +209,10 @@ export default function AuthScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.tab, !isLogin && styles.tabActive]}
-                    onPress={() => setIsLogin(false)}
+                    onPress={() => {
+                      setIsLogin(false);
+                      setErrors({});
+                    }}
                   >
                     <Text
                       style={[styles.tabText, !isLogin && styles.tabTextActive]}
@@ -151,17 +238,24 @@ export default function AuthScreen() {
                 // Login Form - OTP based
                 <View style={styles.formFields}>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Phone Number</Text>
+                    <Text style={styles.label}>Phone Number *</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, errors.phone && styles.inputError]}
                       placeholder="+1 234 567 8900"
                       value={phone}
-                      onChangeText={setPhone}
+                      onChangeText={handlePhoneChange}
                       keyboardType="phone-pad"
+                      maxLength={15}
                     />
+                    {errors.phone && (
+                      <Text style={styles.errorText}>{errors.phone}</Text>
+                    )}
                   </View>
                   <TouchableOpacity
-                    style={styles.submitButton}
+                    style={[
+                      styles.submitButton,
+                      isLoading && styles.submitButtonDisabled,
+                    ]}
                     onPress={handleSubmit}
                     disabled={isLoading}
                   >
@@ -176,23 +270,32 @@ export default function AuthScreen() {
                 // Register Form
                 <View style={styles.formFields}>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Full Name</Text>
+                    <Text style={styles.label}>Full Name *</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, errors.name && styles.inputError]}
                       placeholder="John Doe"
                       value={name}
-                      onChangeText={setName}
+                      onChangeText={handleNameChange}
+                      maxLength={50}
+                      autoCapitalize="words"
                     />
+                    {errors.name && (
+                      <Text style={styles.errorText}>{errors.name}</Text>
+                    )}
                   </View>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Phone Number</Text>
+                    <Text style={styles.label}>Phone Number *</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, errors.phone && styles.inputError]}
                       placeholder="+1 234 567 8900"
                       value={phone}
-                      onChangeText={setPhone}
+                      onChangeText={handlePhoneChange}
                       keyboardType="phone-pad"
+                      maxLength={15}
                     />
+                    {errors.phone && (
+                      <Text style={styles.errorText}>{errors.phone}</Text>
+                    )}
                   </View>
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>I want to be a...</Text>
@@ -232,7 +335,10 @@ export default function AuthScreen() {
                     </View>
                   </View>
                   <TouchableOpacity
-                    style={styles.submitButton}
+                    style={[
+                      styles.submitButton,
+                      isLoading && styles.submitButtonDisabled,
+                    ]}
                     onPress={handleSubmit}
                     disabled={isLoading}
                   >
@@ -264,6 +370,17 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: "600",
   },
   logo: {
     width: 120,
@@ -336,6 +453,15 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
     color: colors.foreground,
+  },
+  inputError: {
+    borderColor: colors.destructive,
+    borderWidth: 2,
+  },
+  errorText: {
+    color: colors.destructive,
+    fontSize: 12,
+    marginTop: 4,
   },
   roleButtons: {
     flexDirection: "row",

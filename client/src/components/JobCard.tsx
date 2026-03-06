@@ -12,11 +12,11 @@ import { Link } from "wouter";
 import type { JobResponse } from "@shared/schema";
 import { format } from "date-fns";
 
-interface JobCardProps {
+interface PoolCardProps {
   job: JobResponse;
 }
 
-export function JobCard({ job }: JobCardProps) {
+export function PoolCard({ job }: PoolCardProps) {
   const percentFunded = Math.min(
     ((job.collectedAmount || 0) / job.targetAmount) * 100,
     100,
@@ -102,3 +102,6 @@ export function JobCard({ job }: JobCardProps) {
     </Card>
   );
 }
+
+// Re-export for backward compatibility
+export { PoolCard as JobCard };

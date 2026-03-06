@@ -18,9 +18,11 @@ import { jobsAPI } from "../services/api";
 import { Job } from "../types";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
-export default function MyJobsScreen() {
+export default function MyPoolsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const { user } = useAuth();
+
+  // All hooks must be called at the top level, before any early returns
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,6 +31,10 @@ export default function MyJobsScreen() {
   );
 
   const fetchJobs = async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
     try {
       setIsLoading(true);
 
@@ -44,7 +50,7 @@ export default function MyJobsScreen() {
 
       setJobs(filteredJobs);
     } catch (error) {
-      console.error("Error fetching jobs:", error);
+      console.error("Error fetching pools:", error);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -85,11 +91,14 @@ export default function MyJobsScreen() {
     }
   };
 
-  const filteredJobs = jobs.filter((job) => {
-    if (activeTab === "leader") return job.leaderId === user?.id;
-    if (activeTab === "worker") return job.selectedWorkerId === user?.id;
-    return true;
-  });
+  // Only filter jobs if user is logged in
+  const filteredJobs = user
+    ? jobs.filter((job) => {
+        if (activeTab === "leader") return job.leaderId === user?.id;
+        if (activeTab === "worker") return job.selectedWorkerId === user?.id;
+        return true;
+      })
+    : [];
 
   const renderJob = ({ item }: { item: Job }) => {
     const isLeader = item.leaderId === user?.id;
@@ -102,14 +111,14 @@ export default function MyJobsScreen() {
     return (
       <TouchableOpacity
         style={styles.jobCard}
-        onPress={() => navigation.navigate("JobDetails", { jobId: item.id })}
+        onPress={() => navigation.navigate("PoolDetails", { jobId: item.id })}
       >
         <View style={styles.jobImageContainer}>
           {item.imageUrl ? (
             <Image source={{ uri: item.imageUrl }} style={styles.jobImage} />
           ) : (
             <View style={styles.jobImagePlaceholder}>
-              <FontAwesome name="briefcase" size={24} color={colors.muted} />
+              <FontAwesome name="group" size={24} color={colors.muted} />
             </View>
           )}
           <View
@@ -202,23 +211,35 @@ export default function MyJobsScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
+      ) : !user ? (
+        <View style={styles.emptyState}>
+          <FontAwesome name="group" size={48} color={colors.muted} />
+          <Text style={styles.emptyTitle}>Login Required</Text>
+          <Text style={styles.emptyText}>Please login to view your pools</Text>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => navigation.navigate("Auth")}
+          >
+            <Text style={styles.createButtonText}>Login</Text>
+          </TouchableOpacity>
+        </View>
       ) : filteredJobs.length === 0 ? (
         <View style={styles.emptyState}>
-          <FontAwesome name="briefcase" size={48} color={colors.muted} />
-          <Text style={styles.emptyTitle}>No Jobs Found</Text>
+          <FontAwesome name="group" size={48} color={colors.muted} />
+          <Text style={styles.emptyTitle}>No Pools Found</Text>
           <Text style={styles.emptyText}>
             {activeTab === "leader"
-              ? "You haven't created any jobs as a leader."
+              ? "You haven't created any pools as a leader."
               : activeTab === "worker"
-                ? "You haven't been selected for any jobs as a worker."
-                : "You don't have any jobs yet."}
+                ? "You haven't been selected for any pools as a worker."
+                : "You don't have any pools yet."}
           </Text>
           {activeTab === "leader" && (
             <TouchableOpacity
               style={styles.createButton}
-              onPress={() => navigation.navigate("CreateJob")}
+              onPress={() => navigation.navigate("CreatePool")}
             >
-              <Text style={styles.createButtonText}>Create Job</Text>
+              <Text style={styles.createButtonText}>Create Pool</Text>
             </TouchableOpacity>
           )}
         </View>

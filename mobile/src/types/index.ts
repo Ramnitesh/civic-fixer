@@ -10,6 +10,9 @@ export interface User {
   availability?: string;
   skillTags: string[];
   createdAt: string;
+  bankAccount?: string;
+  ifscCode?: string;
+  accountHolderName?: string;
 }
 
 // Job types

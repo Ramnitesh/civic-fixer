@@ -18,7 +18,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
-export default function JobsListScreen() {
+export default function PoolsListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,7 +35,7 @@ export default function JobsListScreen() {
       const data = await jobsAPI.getAll(params);
       setJobs(data);
     } catch (error) {
-      console.error("Error fetching jobs:", error);
+      console.error("Error fetching pools:", error);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -92,14 +92,14 @@ export default function JobsListScreen() {
   const renderJob = ({ item }: { item: Job }) => (
     <TouchableOpacity
       style={styles.jobCard}
-      onPress={() => navigation.navigate("JobDetails", { jobId: item.id })}
+      onPress={() => navigation.navigate("PoolDetails", { jobId: item.id })}
     >
       <View style={styles.jobImageContainer}>
         {item.imageUrl ? (
           <Image source={{ uri: item.imageUrl }} style={styles.jobImage} />
         ) : (
           <View style={styles.jobImagePlaceholder}>
-            <FontAwesome name="briefcase" size={24} color={colors.muted} />
+            <FontAwesome name="group" size={24} color={colors.muted} />
           </View>
         )}
       </View>
@@ -162,7 +162,7 @@ export default function JobsListScreen() {
           <FontAwesome name="search" size={20} color={colors.muted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search jobs..."
+            placeholder="Search pools..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor={colors.muted}
@@ -198,15 +198,15 @@ export default function JobsListScreen() {
         />
       </View>
 
-      {/* Jobs List */}
+      {/* Pools List */}
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : filteredJobs.length === 0 ? (
         <View style={styles.emptyState}>
-          <FontAwesome name="briefcase" size={48} color={colors.muted} />
-          <Text style={styles.emptyText}>No jobs found</Text>
+          <FontAwesome name="group" size={48} color={colors.muted} />
+          <Text style={styles.emptyText}>No pools found</Text>
         </View>
       ) : (
         <FlatList

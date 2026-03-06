@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export default function JobsListPage() {
+export default function PoolsListPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const { data: jobs, isLoading } = useJobs(
     statusFilter !== "all" ? { status: statusFilter } : undefined,
@@ -26,7 +26,7 @@ export default function JobsListPage() {
       <div className="bg-muted/30 border-b">
         <div className="container mx-auto px-4 py-12">
           <h1 className="text-4xl font-bold font-display mb-4">
-            Browse Cleanup Jobs
+            Browse Cleanup Pools
           </h1>
           <p className="text-muted-foreground max-w-2xl text-lg">
             Find projects in your area that need funding or helping hands.
@@ -41,7 +41,7 @@ export default function JobsListPage() {
           <div className="relative w-full md:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search jobs (coming soon)..."
+              placeholder="Search pools (coming soon)..."
               className="pl-10"
             />
           </div>
@@ -80,7 +80,7 @@ export default function JobsListPage() {
         ) : jobs?.length === 0 ? (
           <div className="text-center py-20 border-2 border-dashed rounded-xl">
             <h3 className="text-xl font-bold text-muted-foreground">
-              No jobs found
+              No pools found
             </h3>
             <p className="text-sm text-muted-foreground mt-2">
               Try adjusting your filters.
