@@ -153,7 +153,7 @@ export const jobsAPI = {
     jobId: number,
     data: { amount: number; description: string; proofUrl: string },
   ) => {
-    const response = await api.post(`/jobs/${jobId}/expense`, data);
+    const response = await api.post(`/jobs/${jobId}/expenses`, data);
     return response.data;
   },
 };

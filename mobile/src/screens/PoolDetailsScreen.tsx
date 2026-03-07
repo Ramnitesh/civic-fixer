@@ -10,7 +10,10 @@ import {
   Alert,
   TextInput,
   Image,
+  Modal,
+  Pressable,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../utils/colors";
@@ -38,6 +41,12 @@ export default function JobDetailsScreen() {
   const [contributing, setContributing] = useState(false);
   const [contributionAmount, setContributionAmount] = useState("");
   const [contributionError, setContributionError] = useState("");
+  const [showContributorsModal, setShowContributorsModal] = useState(false);
+  const [showRefundInfo, setShowRefundInfo] = useState(false);
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseDescription, setExpenseDescription] = useState("");
+  const [expenseImage, setExpenseImage] = useState<string | null>(null);
+  const [addExpenseLoading, setAddExpenseLoading] = useState(false);
 
   const validateContribution = (amount: string) => {
     if (!amount.trim()) {
@@ -66,6 +75,8 @@ export default function JobDetailsScreen() {
     return "";
   };
 
+  const [ledger, setLedger] = useState<any>(null);
+
   const fetchJob = async () => {
     try {
       const data = await jobsAPI.getById(jobId);
@@ -77,9 +88,27 @@ export default function JobDetailsScreen() {
     }
   };
 
+  const fetchLedger = async () => {
+    try {
+      const data = await jobsAPI.getLedger(jobId);
+      setLedger(data);
+    } catch (error) {
+      console.error("Error fetching ledger:", error);
+    }
+  };
+
   useEffect(() => {
     fetchJob();
+    if (job?.executionMode === "LEADER_EXECUTION") {
+      fetchLedger();
+    }
   }, [jobId]);
+
+  useEffect(() => {
+    if (job?.executionMode === "LEADER_EXECUTION") {
+      fetchLedger();
+    }
+  }, [job?.executionMode]);
 
   const handleContribute = async () => {
     const error = validateContribution(contributionAmount);
@@ -99,6 +128,47 @@ export default function JobDetailsScreen() {
       Alert.alert("Error", error.message || "Failed to contribute");
     } finally {
       setContributing(false);
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setExpenseImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image");
+    }
+  };
+
+  const handleAddExpense = async () => {
+    if (!expenseAmount || !expenseDescription) return;
+    try {
+      setAddExpenseLoading(true);
+      // Use the jobsAPI.createExpense function with proofUrl from the selected image
+      await jobsAPI.createExpense(jobId, {
+        amount: parseFloat(expenseAmount),
+        description: expenseDescription,
+        proofUrl: expenseImage || "",
+      });
+      Alert.alert("Success", "Expense added successfully!");
+      setExpenseAmount("");
+      setExpenseDescription("");
+      setExpenseImage(null);
+      fetchJob();
+      fetchLedger();
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to add expense");
+    } finally {
+      setAddExpenseLoading(false);
     }
   };
 
@@ -204,7 +274,13 @@ export default function JobDetailsScreen() {
           {/* Funding Progress */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Funding Progress</Text>
-            <View style={styles.fundingCard}>
+            <TouchableOpacity
+              style={styles.fundingCard}
+              onPress={() => setShowContributorsModal(true)}
+              disabled={
+                !job.contributorCount || Number(job.contributorCount) === 0
+              }
+            >
               <View style={styles.fundingHeader}>
                 <Text style={styles.fundingAmount}>
                   ₹{job.collectedAmount} raised
@@ -218,8 +294,17 @@ export default function JobDetailsScreen() {
                   style={[styles.progressFill, { width: `${fundingPercent}%` }]}
                 />
               </View>
-              <Text style={styles.targetText}>Goal: ₹{job.targetAmount}</Text>
-            </View>
+              <View style={styles.fundingFooter}>
+                <Text style={styles.targetText}>Goal: ₹{job.targetAmount}</Text>
+                {job.contributorCount != null &&
+                  Number(job.contributorCount) > 0 && (
+                    <Text style={styles.contributorCountText}>
+                      {job.contributorCount} contributor
+                      {Number(job.contributorCount) !== 1 ? "s" : ""}
+                    </Text>
+                  )}
+              </View>
+            </TouchableOpacity>
           </View>
           {/* Contribution Section */}
           {job.status === "FUNDING_OPEN" && (
@@ -334,19 +419,297 @@ export default function JobDetailsScreen() {
               </View>
             </View>
           </View>
-          {/* Contributors */}
-          {job.contributorCount != null &&
-            job.contributorCount != undefined &&
-            Number(job.contributorCount) > 0 && (
+          {/* Ledger Section for Leader Execution - Visible to contributors */}
+          {job.executionMode === "LEADER_EXECUTION" &&
+            (job.status === "IN_PROGRESS" ||
+              job.status === "AWAITING_VERIFICATION" ||
+              job.status === "UNDER_REVIEW" ||
+              job.status === "COMPLETED") && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  Contributors ({String(job?.contributorCount) || 0})
-                </Text>
-                <View style={styles.contributorsList}>
-                  {job.contributorProfiles &&
-                    job.contributorProfiles.length > 0 &&
-                    job?.contributorProfiles?.map((contributor, index) => (
-                      <View key={index} style={styles.contributorItem}>
+                <Text style={styles.sectionTitle}>Pool Ledger</Text>
+                {ledger && ledger.totalRaised > 0 && (
+                  <View style={styles.ledgerSummary}>
+                    <View style={styles.ledgerRow}>
+                      <Text style={styles.ledgerLabel}>Total Raised</Text>
+                      <Text style={styles.ledgerValue}>
+                        ₹{Number(ledger.totalRaised).toLocaleString("en-IN")}
+                      </Text>
+                    </View>
+                    <View style={styles.ledgerRow}>
+                      <Text style={styles.ledgerLabel}>Spent</Text>
+                      <Text style={styles.ledgerValue}>
+                        ₹{Number(ledger.totalSpent).toLocaleString("en-IN")}
+                      </Text>
+                    </View>
+                    <View style={styles.ledgerRow}>
+                      <Text style={styles.ledgerLabel}>Remaining</Text>
+                      <Text style={styles.ledgerValue}>
+                        ₹
+                        {Number(ledger.remainingBalance).toLocaleString(
+                          "en-IN",
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                {ledger?.transactions && ledger.transactions.length > 0 ? (
+                  <View style={styles.expenseList}>
+                    {ledger.transactions.map((tx: any, index: number) => (
+                      <View key={index} style={styles.expenseItem}>
+                        <View style={styles.expenseInfo}>
+                          <Text style={styles.expenseDescription}>
+                            {tx.description}
+                          </Text>
+                          <Text style={styles.expenseDate}>
+                            {tx.createdAt
+                              ? new Date(tx.createdAt).toLocaleDateString(
+                                  "en-GB",
+                                  {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  },
+                                )
+                              : ""}
+                          </Text>
+                        </View>
+                        <Text style={styles.expenseAmount}>
+                          ₹{Number(tx.amount).toLocaleString("en-IN")}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.noExpensesText}>
+                    No expenses added yet
+                  </Text>
+                )}
+              </View>
+            )}
+
+          {/* Add Expense Section - Only for Owner when IN_PROGRESS */}
+          {job.executionMode === "LEADER_EXECUTION" &&
+            job.status === "IN_PROGRESS" &&
+            user?.id === job.leaderId && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Add Expense</Text>
+                <View style={styles.expenseForm}>
+                  <TextInput
+                    style={styles.expenseInput}
+                    placeholder="Expense description"
+                    value={expenseDescription}
+                    onChangeText={setExpenseDescription}
+                  />
+                  <TextInput
+                    style={styles.expenseInput}
+                    placeholder="Amount (₹)"
+                    value={expenseAmount}
+                    onChangeText={setExpenseAmount}
+                    keyboardType="decimal-pad"
+                  />
+                  {/* Image Picker */}
+                  <TouchableOpacity
+                    style={styles.imagePickerButton}
+                    onPress={pickImage}
+                  >
+                    {expenseImage ? (
+                      <View style={styles.imagePreviewContainer}>
+                        <Image
+                          source={{ uri: expenseImage }}
+                          style={styles.imagePreview}
+                        />
+                        <Text style={styles.imagePreviewText}>
+                          Tap to change image
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.imagePickerContent}>
+                        <FontAwesome
+                          name="camera"
+                          size={24}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.imagePickerText}>
+                          Add Proof Image (Optional)
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.expenseButton,
+                      (addExpenseLoading ||
+                        !expenseAmount ||
+                        !expenseDescription) &&
+                        styles.expenseButtonDisabled,
+                    ]}
+                    onPress={handleAddExpense}
+                    disabled={
+                      addExpenseLoading || !expenseAmount || !expenseDescription
+                    }
+                  >
+                    {addExpenseLoading ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <Text style={styles.expenseButtonText}>Add Expense</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+          {/* Refund Section for Completed Pools */}
+          {job.status === "COMPLETED" && user && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Your Refund</Text>
+              {job.contributorProfiles?.some((c) => c.id === user.id) ? (
+                <View style={styles.refundCard}>
+                  {/* Use ledger-based calculation: (Remaining ÷ Total Raised) × Contribution = Refund */}
+                  {(() => {
+                    const totalRaised = Number(
+                      job.metadata?.totalRaised ?? job.collectedAmount,
+                    );
+                    const remainingBalance = Number(
+                      job.metadata?.remainingBalance ?? 0,
+                    );
+                    const refundRatio =
+                      totalRaised > 0 ? remainingBalance / totalRaised : 0;
+                    const myContribution = Number(
+                      job.contributorProfiles?.find((c) => c.id === user.id)
+                        ?.contributionAmount ?? 0,
+                    );
+                    const refundAmount = myContribution * refundRatio;
+                    return (
+                      <>
+                        <View style={styles.refundRow}>
+                          <Text style={styles.refundLabel}>
+                            Your Contribution
+                          </Text>
+                          <Text style={styles.refundValue}>
+                            ₹{myContribution.toLocaleString("en-IN")}
+                          </Text>
+                        </View>
+                        <View style={styles.refundRow}>
+                          <Text style={styles.refundLabel}>Platform Fee</Text>
+                          <Text style={styles.refundValue}>
+                            ₹
+                            {Number(
+                              myContribution * (job.platformFeePercent / 100),
+                            ).toLocaleString("en-IN")}
+                          </Text>
+                        </View>
+                        <View style={[styles.refundRow, styles.refundTotalRow]}>
+                          <Text style={styles.refundTotalLabel}>
+                            Refund Amount
+                          </Text>
+                          <Text style={styles.refundTotalValue}>
+                            ₹{refundAmount.toLocaleString("en-IN")}
+                          </Text>
+                        </View>
+                      </>
+                    );
+                  })()}
+                </View>
+              ) : (
+                <View style={styles.refundCard}>
+                  <Text style={styles.noRefundText}>
+                    You did not contribute to this pool
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Contributors Modal */}
+      <Modal
+        visible={showContributorsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowContributorsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Contributors ({job.contributorCount || 0})
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowContributorsModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <FontAwesome name="close" size={20} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollView}>
+              {/* Refund Calculation Info - shown only for COMPLETED/UNDER_REVIEW */}
+              {(job.status === "COMPLETED" ||
+                job.status === "UNDER_REVIEW") && (
+                <View style={styles.refundInfoCard}>
+                  <View style={styles.refundInfoHeader}>
+                    <Text style={styles.refundInfoTitle}>
+                      Refund Calculation
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setShowRefundInfo(!showRefundInfo)}
+                      style={styles.infoIconButton}
+                    >
+                      <FontAwesome
+                        name="info-circle"
+                        size={18}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  {showRefundInfo && (
+                    <View style={styles.refundInfoContent}>
+                      <Text style={styles.refundInfoText}>
+                        Total Raised: ₹
+                        {Number(
+                          job.metadata?.totalRaised ?? job.collectedAmount,
+                        ).toLocaleString("en-IN")}
+                      </Text>
+                      <Text style={styles.refundInfoText}>
+                        Spent: ₹
+                        {Number(
+                          (job.metadata?.totalRaised ?? job.collectedAmount) -
+                            (job.metadata?.remainingBalance ?? 0),
+                        ).toLocaleString("en-IN")}
+                      </Text>
+                      <Text style={styles.refundInfoText}>
+                        Remaining: ₹
+                        {Number(
+                          job.metadata?.remainingBalance ?? 0,
+                        ).toLocaleString("en-IN")}
+                      </Text>
+                      <Text style={styles.refundInfoFormula}>
+                        Calculation: (Remaining ÷ Total Raised) × Your
+                        Contribution = Your Refund
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              {job.contributorProfiles && job.contributorProfiles.length > 0 ? (
+                job.contributorProfiles.map((contributor, index) => {
+                  // Show refund only for COMPLETED or UNDER_REVIEW status
+                  const isRefundVisible =
+                    job.status === "COMPLETED" || job.status === "UNDER_REVIEW";
+                  // Use ledger-based calculation: (Remaining ÷ Total Raised) × Contribution = Refund
+                  const totalRaised = Number(
+                    job.metadata?.totalRaised ?? job.collectedAmount,
+                  );
+                  const remainingBalance = Number(
+                    job.metadata?.remainingBalance ?? 0,
+                  );
+                  const refundRatio =
+                    totalRaised > 0 ? remainingBalance / totalRaised : 0;
+                  const refundAmount =
+                    Number(contributor?.contributionAmount ?? 0) * refundRatio;
+                  return (
+                    <View key={index} style={styles.contributorItem}>
+                      <View style={styles.contributorRow}>
                         <View style={styles.contributorAvatar}>
                           <Text style={styles.contributorInitial}>
                             {contributor?.name?.charAt(0) || ""}
@@ -356,17 +719,44 @@ export default function JobDetailsScreen() {
                           <Text style={styles.contributorName}>
                             {contributor?.name}
                           </Text>
+                          {isRefundVisible && (
+                            <Text style={styles.refundAmountText}>
+                              Refund: ₹{refundAmount.toLocaleString("en-IN")}
+                            </Text>
+                          )}
+                        </View>
+                        <View style={styles.contributorAmountContainer}>
                           <Text style={styles.contributorAmount}>
-                            ₹{String(contributor?.contributionAmount ?? 0)}
+                            ₹
+                            {Number(
+                              contributor?.contributionAmount ?? 0,
+                            ).toLocaleString("en-IN")}
                           </Text>
+                          {contributor?.contributionDate && (
+                            <Text style={styles.contributorDate}>
+                              {new Date(
+                                contributor.contributionDate,
+                              ).toLocaleDateString("en-GB", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </Text>
+                          )}
                         </View>
                       </View>
-                    ))}
-                </View>
-              </View>
-            )}
+                    </View>
+                  );
+                })
+              ) : (
+                <Text style={styles.noContributorsText}>
+                  No contributors yet
+                </Text>
+              )}
+            </ScrollView>
+          </View>
         </View>
-      </ScrollView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -509,9 +899,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 6,
   },
+  fundingFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   targetText: {
     fontSize: 14,
     color: colors.muted,
+  },
+  contributorCountText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: "600",
   },
   contributeCard: {
     flexDirection: "row",
@@ -604,13 +1004,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   contributorItem: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: colors.card,
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: 8,
+  },
+  contributorRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   contributorAvatar: {
     width: 40,
@@ -634,9 +1037,268 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: colors.foreground,
   },
+  contributorPhone: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  contributorDate: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  contributorAmountContainer: {
+    alignItems: "flex-end",
+  },
   contributorAmount: {
     fontSize: 14,
     fontWeight: "bold",
     color: colors.primary,
+  },
+  refundAmountText: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 40,
+    maxHeight: "70%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: colors.foreground,
+  },
+  modalCloseButton: {
+    padding: 8,
+  },
+  modalScrollView: {
+    padding: 16,
+  },
+  noContributorsText: {
+    fontSize: 14,
+    color: colors.muted,
+    textAlign: "center",
+    paddingVertical: 20,
+  },
+  // Refund section styles
+  refundCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  refundRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  refundLabel: {
+    fontSize: 14,
+    color: colors.muted,
+  },
+  refundValue: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.foreground,
+  },
+  refundTotalRow: {
+    backgroundColor: colors.secondary,
+    borderBottomWidth: 0,
+  },
+  refundTotalLabel: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: colors.foreground,
+  },
+  refundTotalValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: colors.primary,
+  },
+  noRefundText: {
+    fontSize: 14,
+    color: colors.muted,
+    textAlign: "center",
+    padding: 16,
+  },
+  // Refund Info styles
+  refundInfoCard: {
+    backgroundColor: colors.secondary,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  refundInfoHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  refundInfoTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.foreground,
+  },
+  infoIconButton: {
+    padding: 4,
+  },
+  refundInfoContent: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  refundInfoText: {
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: 4,
+  },
+  refundInfoFormula: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: "500",
+    marginTop: 8,
+  },
+  // Ledger styles
+  ledgerSummary: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  ledgerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  ledgerLabel: {
+    fontSize: 14,
+    color: colors.muted,
+  },
+  ledgerValue: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.foreground,
+  },
+  expenseList: {
+    gap: 8,
+  },
+  expenseItem: {
+    backgroundColor: colors.card,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  expenseInfo: {
+    flex: 1,
+  },
+  expenseDescription: {
+    fontSize: 14,
+    color: colors.foreground,
+  },
+  expenseDate: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  expenseAmount: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.primary,
+  },
+  noExpensesText: {
+    fontSize: 14,
+    color: colors.muted,
+    textAlign: "center",
+    paddingVertical: 16,
+  },
+  expenseForm: {
+    gap: 12,
+  },
+  expenseInput: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+  },
+  expenseButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  expenseButtonDisabled: {
+    opacity: 0.6,
+  },
+  expenseButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  // Image Picker styles
+  imagePickerButton: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderStyle: "dashed",
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 100,
+  },
+  imagePickerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  imagePickerText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: "500",
+  },
+  imagePreviewContainer: {
+    alignItems: "center",
+    width: "100%",
+  },
+  imagePreview: {
+    width: "100%",
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  imagePreviewText: {
+    fontSize: 12,
+    color: colors.muted,
   },
 });
