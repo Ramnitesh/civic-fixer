@@ -306,24 +306,8 @@ export default function AuthPage() {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">
-                        I want to be a...
-                      </label>
-                      <Select value={role} onValueChange={setRole}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="MEMBER">
-                            Member (Fund & Organize Jobs)
-                          </SelectItem>
-                          <SelectItem value="WORKER">
-                            Worker (Do Jobs)
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {/* Role selection hidden - default to MEMBER */}
+                    <input type="hidden" value={role} />
 
                     <Button
                       onClick={() => {

@@ -45,6 +45,7 @@ export default function ContributionsScreen() {
       setContributions([]);
       setJobs({});
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 

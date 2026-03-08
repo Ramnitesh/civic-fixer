@@ -23,6 +23,7 @@ export const colors = {
   fundingOpen: "#22c55e",
   fundingComplete: "#3b82f6",
   workerSelected: "#8b5cf6",
+  leaderExecution: "#0ea5e9",
   inProgress: "#f59e0b",
   awaitingVerification: "#f97316",
   underReview: "#eab308",

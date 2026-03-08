@@ -297,43 +297,7 @@ export default function AuthScreen() {
                       <Text style={styles.errorText}>{errors.phone}</Text>
                     )}
                   </View>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>I want to be a...</Text>
-                    <View style={styles.roleButtons}>
-                      <TouchableOpacity
-                        style={[
-                          styles.roleButton,
-                          role === "MEMBER" && styles.roleButtonActive,
-                        ]}
-                        onPress={() => setRole("MEMBER")}
-                      >
-                        <Text
-                          style={[
-                            styles.roleButtonText,
-                            role === "MEMBER" && styles.roleButtonTextActive,
-                          ]}
-                        >
-                          Member
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.roleButton,
-                          role === "WORKER" && styles.roleButtonActive,
-                        ]}
-                        onPress={() => setRole("WORKER")}
-                      >
-                        <Text
-                          style={[
-                            styles.roleButtonText,
-                            role === "WORKER" && styles.roleButtonTextActive,
-                          ]}
-                        >
-                          Worker
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  {/* Role selection hidden - default to MEMBER */}
                   <TouchableOpacity
                     style={[
                       styles.submitButton,

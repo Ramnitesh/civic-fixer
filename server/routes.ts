@@ -9,7 +9,7 @@ import { createHash } from "crypto";
 
 const scryptAsync = promisify(scrypt);
 const REVIEW_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours for worker execution
-const LEADER_EXECUTION_REVIEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days for leader execution
+const LEADER_EXECUTION_REVIEW_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours for leader execution
 const WORKER_EXECUTION_FEE_PERCENT = 5;
 // Leader execution: no platform fee
 const LEADER_EXECUTION_FEE_PERCENT = 0;

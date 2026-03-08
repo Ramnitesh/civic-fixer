@@ -17,6 +17,7 @@ import { Job } from "../types";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 
 export default function PoolsListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -102,6 +103,28 @@ export default function PoolsListScreen() {
             <FontAwesome name="group" size={24} color={colors.muted} />
           </View>
         )}
+        {/* Execution Mode Icon Badge */}
+        <View
+          style={[
+            styles.executionModeBadge,
+            {
+              backgroundColor:
+                item.executionMode === "LEADER_EXECUTION"
+                  ? colors.leaderExecution
+                  : colors.workerSelected,
+            },
+          ]}
+        >
+          {item.executionMode === "LEADER_EXECUTION" ? (
+            <FontAwesome name="user" size={10} color="white" />
+          ) : (
+            <MaterialCommunityIcons
+              name="account-cowboy-hat"
+              size={10}
+              color="white"
+            />
+          )}
+        </View>
       </View>
       <View style={styles.jobContent}>
         <View style={styles.jobHeader}>
@@ -302,6 +325,19 @@ const styles = StyleSheet.create({
   },
   jobImageContainer: {
     height: 120,
+    position: "relative",
+  },
+  executionModeBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   jobImage: {
     width: "100%",

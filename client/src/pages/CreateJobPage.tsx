@@ -62,7 +62,7 @@ export default function CreatePoolPage() {
       targetAmount: undefined,
       isPrivateResidentialProperty: false,
       isPrivateJob: false,
-      executionMode: undefined,
+      executionMode: "LEADER_EXECUTION",
       imageUrl: undefined,
     },
   });
@@ -143,7 +143,7 @@ export default function CreatePoolPage() {
           imageUrl,
         } as any,
         {
-          onSuccess: () => setLocation("/dashboard"),
+          onSuccess: () => setLocation("/mypools"),
         },
       );
     } catch (error) {
@@ -238,38 +238,8 @@ export default function CreatePoolPage() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="executionMode"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Execution Mode</FormLabel>
-                      <FormControl>
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select execution mode" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="WORKER_EXECUTION">
-                              Worker Execution (escrow)
-                            </SelectItem>
-                            <SelectItem value="LEADER_EXECUTION">
-                              Leader Execution (expense ledger)
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                      <FormDescription>
-                        Choose how this job will be executed. This can only be
-                        changed while job status is CREATED.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Execution mode is always LEADER_EXECUTION - hidden from user */}
+                <input type="hidden" value={executionMode} />
 
                 {executionMode === "WORKER_EXECUTION" && (
                   <FormField

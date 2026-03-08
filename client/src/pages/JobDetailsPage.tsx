@@ -58,6 +58,10 @@ export default function PoolDetailsPage() {
   // Modal state for add money
   const [showAddMoneyModal, setShowAddMoneyModal] = useState(false);
 
+  // Modal state for confirmation popup before mark as complete
+  const [showConfirmCompleteModal, setShowConfirmCompleteModal] =
+    useState(false);
+
   // Wallet data
   const {
     wallet,
@@ -927,13 +931,12 @@ export default function PoolDetailsPage() {
                       </h3>
                       <p className="text-xs text-muted-foreground">
                         Once you mark execution as completed, contributors will
-                        have 7 days to review the work and raise disputes if
-                        needed.
+                        have 24 hours to review the work and raise disputes if
+                        needed. After 24 hours, refunds will be processed
+                        automatically.
                       </p>
                       <Button
-                        onClick={() =>
-                          updateJob({ id, status: "UNDER_REVIEW" })
-                        }
+                        onClick={() => setShowConfirmCompleteModal(true)}
                         disabled={isUpdatingJob}
                       >
                         Mark Execution Completed
@@ -1918,6 +1921,20 @@ export default function PoolDetailsPage() {
                   Calculation: (Remaining ÷ Total Raised) × Your Contribution =
                   Your Refund
                 </p>
+                {job.status === "UNDER_REVIEW" && job.reviewDeadline && (
+                  <p className="text-xs text-blue-700 mt-2 pt-2 border-t border-blue-200">
+                    Refunds will be credited after:{" "}
+                    <strong>
+                      {new Date(job.reviewDeadline).toLocaleString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </strong>
+                  </p>
+                )}
               </div>
             ) : null}
 
@@ -2044,29 +2061,14 @@ export default function PoolDetailsPage() {
                 placeholder="Target amount"
               />
             </div>
-            {/* Show Private residential property for Worker Execution */}
-            {job?.executionMode === "WORKER_EXECUTION" && (
-              <div className="flex items-center justify-between rounded border p-3">
-                <span className="text-sm">Private residential property</span>
-                <Switch
-                  checked={editPrivateProperty}
-                  onCheckedChange={setEditPrivateProperty}
-                />
-              </div>
-            )}
-
-            {/* Show Private Job (Contributors Only) for Leader Execution */}
-            {job?.executionMode === "LEADER_EXECUTION" && (
-              <div className="flex items-center justify-between rounded border p-3">
-                <span className="text-sm">
-                  Private Pool (Contributors Only)
-                </span>
-                <Switch
-                  checked={editPrivateJob}
-                  onCheckedChange={setEditPrivateJob}
-                />
-              </div>
-            )}
+            {/* Private Pool toggle - always shown (Leader Execution only) */}
+            <div className="flex items-center justify-between rounded border p-3">
+              <span className="text-sm">Private Pool (Contributors Only)</span>
+              <Switch
+                checked={editPrivateJob}
+                onCheckedChange={setEditPrivateJob}
+              />
+            </div>
 
             <Button
               className="w-full"
@@ -2151,6 +2153,76 @@ export default function PoolDetailsPage() {
 
             <div className="text-center text-xs text-muted-foreground">
               <p>Money will be added instantly to your wallet</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Modal for Mark as Complete */}
+      <Dialog
+        open={showConfirmCompleteModal}
+        onOpenChange={setShowConfirmCompleteModal}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Completion</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-sm font-semibold text-amber-800">
+                Important Information
+              </p>
+              <ul className="text-xs text-amber-700 mt-2 space-y-1">
+                <li>
+                  • Contributors will have <strong>24 hours</strong> to review
+                  the work and raise disputes
+                </li>
+                <li>
+                  • After 24 hours, refunds will be processed automatically
+                </li>
+                <li>
+                  • Remaining balance after expenses:{" "}
+                  <strong>₹{ledger?.remainingBalance || 0}</strong>
+                </li>
+              </ul>
+            </div>
+
+            {/* Refund Preview */}
+            {ledger && contributorProfiles.length > 0 && (
+              <div className="border rounded-lg p-3 space-y-2">
+                <p className="text-sm font-semibold">Refund Preview</p>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>Total Raised: ₹{ledger.totalRaised || 0}</p>
+                  <p>Total Spent: ₹{ledger.totalSpent || 0}</p>
+                  <p className="font-medium text-green-700">
+                    Remaining for Refund: ₹{ledger.remainingBalance || 0}
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground pt-2 border-t">
+                  Each contributor will receive a refund proportional to their
+                  contribution based on the remaining balance.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowConfirmCompleteModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  setShowConfirmCompleteModal(false);
+                  updateJob({ id, status: "UNDER_REVIEW" });
+                }}
+                disabled={isUpdatingJob}
+              >
+                {isUpdatingJob ? "Processing..." : "Confirm & Complete"}
+              </Button>
             </div>
           </div>
         </DialogContent>

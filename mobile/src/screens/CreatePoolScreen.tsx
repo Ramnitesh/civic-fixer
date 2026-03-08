@@ -9,12 +9,15 @@ import {
   SafeAreaView,
   Alert,
   Switch,
+  Image,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../utils/colors";
-import { jobsAPI } from "../services/api";
+import { jobsAPI, uploadAPI } from "../services/api";
 import { useAuth } from "../navigation/AuthContext";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 type RootStackParamList = {
   Main: undefined;
@@ -36,9 +39,29 @@ export default function CreateJobScreen() {
   const [isPrivateProperty, setIsPrivateProperty] = useState(false);
   const [isPrivateJob, setIsPrivateJob] = useState(false);
   const [executionMode, setExecutionMode] = useState("LEADER_EXECUTION");
+  const [poolImage, setPoolImage] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
   // Validation errors
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setPoolImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image");
+    }
+  };
 
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {};
@@ -48,8 +71,8 @@ export default function CreateJobScreen() {
       newErrors.title = "Title is required";
     } else if (title.trim().length < 5) {
       newErrors.title = "Title must be at least 5 characters";
-    } else if (title.trim().length > 100) {
-      newErrors.title = "Title must be less than 100 characters";
+    } else if (title.trim().length > 25) {
+      newErrors.title = "Title must be less than 25 characters";
     }
 
     // Description validation
@@ -66,6 +89,8 @@ export default function CreateJobScreen() {
       newErrors.location = "Location is required";
     } else if (location.trim().length < 3) {
       newErrors.location = "Location must be at least 3 characters";
+    } else if (location.trim().length > 100) {
+      newErrors.location = "Location must be less than 100 characters";
     }
 
     // Target amount validation
@@ -93,6 +118,36 @@ export default function CreateJobScreen() {
 
     try {
       setIsLoading(true);
+
+      let imageUrl = "";
+
+      // Upload image to Cloudinary if selected
+      if (poolImage) {
+        try {
+          setImageUploading(true);
+          const signatureData = await uploadAPI.getSignature("pool_image");
+
+          const uploadResult = await uploadAPI.uploadToCloudinary(
+            poolImage,
+            signatureData.signature,
+            signatureData.timestamp,
+            signatureData.cloudName,
+            signatureData.apiKey,
+            signatureData.folder,
+          );
+
+          imageUrl = uploadResult.url;
+        } catch (uploadError) {
+          console.error("Error uploading image:", uploadError);
+          Alert.alert("Error", "Failed to upload image. Please try again.");
+          setIsLoading(false);
+          setImageUploading(false);
+          return;
+        } finally {
+          setImageUploading(false);
+        }
+      }
+
       await jobsAPI.create({
         title: title.trim(),
         description: description.trim(),
@@ -101,9 +156,10 @@ export default function CreateJobScreen() {
         isPrivateResidentialProperty: isPrivateProperty,
         isPrivateJob: isPrivateJob,
         executionMode: executionMode as any,
+        imageUrl: imageUrl || undefined,
       });
       Alert.alert("Success", "Pool created successfully!");
-      navigation.goBack();
+      navigation.navigate("MyPools" as never);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to create pool");
     } finally {
@@ -147,12 +203,12 @@ export default function CreateJobScreen() {
                   setTitle(text);
                   if (errors.title) setErrors({ ...errors, title: "" });
                 }}
-                maxLength={100}
+                maxLength={25}
               />
               {errors.title && (
                 <Text style={styles.errorText}>{errors.title}</Text>
               )}
-              <Text style={styles.charCount}>{title.length}/100</Text>
+              <Text style={styles.charCount}>{title.length}/25</Text>
             </View>
 
             <View style={styles.inputGroup}>
@@ -191,10 +247,12 @@ export default function CreateJobScreen() {
                   setLocation(text);
                   if (errors.location) setErrors({ ...errors, location: "" });
                 }}
+                maxLength={100}
               />
               {errors.location && (
                 <Text style={styles.errorText}>{errors.location}</Text>
               )}
+              <Text style={styles.charCount}>{location.length}/100</Text>
             </View>
 
             <View style={styles.inputGroup}>
@@ -203,6 +261,7 @@ export default function CreateJobScreen() {
                 style={[styles.input, errors.targetAmount && styles.inputError]}
                 placeholder="e.g., 10000"
                 value={targetAmount}
+                maxLength={8}
                 onChangeText={(text) => {
                   // Only allow numbers and decimal point
                   const filtered = text.replace(/[^0-9.]/g, "");
@@ -222,101 +281,70 @@ export default function CreateJobScreen() {
               )}
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Execution Mode</Text>
-              <View style={styles.executionOptions}>
-                <TouchableOpacity
-                  style={[
-                    styles.executionOption,
-                    executionMode === "LEADER_EXECUTION" &&
-                      styles.executionOptionActive,
-                  ]}
-                  onPress={() => setExecutionMode("LEADER_EXECUTION")}
-                >
-                  <Text
-                    style={[
-                      styles.executionOptionText,
-                      executionMode === "LEADER_EXECUTION" &&
-                        styles.executionOptionTextActive,
-                    ]}
-                  >
-                    Leader
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.executionOption,
-                    executionMode === "WORKER_EXECUTION" &&
-                      styles.executionOptionActive,
-                  ]}
-                  onPress={() => setExecutionMode("WORKER_EXECUTION")}
-                >
-                  <Text
-                    style={[
-                      styles.executionOptionText,
-                      executionMode === "WORKER_EXECUTION" &&
-                        styles.executionOptionTextActive,
-                    ]}
-                  >
-                    Worker
-                  </Text>
-                </TouchableOpacity>
+            {/* Execution mode is always LEADER_EXECUTION - hidden from user */}
+
+            {/* Private Pool toggle - always shown for Leader Execution */}
+            <View style={styles.switchGroup}>
+              <View style={styles.switchInfo}>
+                <Text style={styles.switchLabel}>
+                  Private Pool (Contributors Only)
+                </Text>
+                <Text style={styles.switchDescription}>
+                  Only contributors can see this pool
+                </Text>
               </View>
+              <Switch
+                value={isPrivateJob}
+                onValueChange={setIsPrivateJob}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="white"
+              />
             </View>
 
-            {executionMode === "WORKER_EXECUTION" && (
-              <View style={styles.switchGroup}>
-                <View style={styles.switchInfo}>
-                  <Text style={styles.switchLabel}>Private Property *</Text>
-                  <Text style={styles.switchDescription}>
-                    Required for worker execution mode
-                  </Text>
-                </View>
-                <Switch
-                  value={isPrivateProperty}
-                  onValueChange={(value) => {
-                    setIsPrivateProperty(value);
-                    if (errors.privateProperty)
-                      setErrors({ ...errors, privateProperty: "" });
-                  }}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor="white"
-                />
-              </View>
-            )}
-            {errors.privateProperty && (
-              <Text style={styles.errorText}>{errors.privateProperty}</Text>
-            )}
-
-            {executionMode === "LEADER_EXECUTION" && (
-              <View style={styles.switchGroup}>
-                <View style={styles.switchInfo}>
-                  <Text style={styles.switchLabel}>
-                    Private Pool (Contributors Only)
-                  </Text>
-                  <Text style={styles.switchDescription}>
-                    Only contributors can see this pool
-                  </Text>
-                </View>
-                <Switch
-                  value={isPrivateJob}
-                  onValueChange={setIsPrivateJob}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor="white"
-                />
-              </View>
-            )}
+            {/* Pool Image - Optional */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Pool Image (Optional)</Text>
+              <TouchableOpacity
+                style={styles.imagePickerButton}
+                onPress={pickImage}
+              >
+                {poolImage ? (
+                  <View style={styles.imagePreviewContainer}>
+                    <Image
+                      source={{ uri: poolImage }}
+                      style={styles.imagePreview}
+                    />
+                    <Text style={styles.imagePreviewText}>
+                      Tap to change image
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.imagePickerContent}>
+                    <FontAwesome
+                      name="camera"
+                      size={24}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.imagePickerText}>Add Pool Image</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               style={[
                 styles.submitButton,
-                isLoading && styles.submitButtonDisabled,
+                (isLoading || imageUploading) && styles.submitButtonDisabled,
               ]}
               onPress={handleSubmit}
-              disabled={isLoading}
+              disabled={isLoading || imageUploading}
             >
               <Text style={styles.submitButtonText}>
-                {isLoading ? "Creating..." : "Create Pool"}
+                {imageUploading
+                  ? "Uploading Image..."
+                  : isLoading
+                    ? "Creating..."
+                    : "Create Pool"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -425,4 +453,39 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: { opacity: 0.6 },
   submitButtonText: { color: "white", fontSize: 16, fontWeight: "600" },
+  imagePickerButton: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderStyle: "dashed",
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 150,
+  },
+  imagePreviewContainer: {
+    alignItems: "center",
+    width: "100%",
+  },
+  imagePreview: {
+    width: "100%",
+    height: 200,
+    borderRadius: 8,
+  },
+  imagePreviewText: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 8,
+  },
+  imagePickerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  imagePickerText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: "500",
+  },
 });

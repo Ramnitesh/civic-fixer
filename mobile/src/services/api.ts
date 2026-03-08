@@ -105,6 +105,70 @@ export const authAPI = {
   },
 };
 
+// Cloudinary Upload API
+export const uploadAPI = {
+  getSignature: async (purpose: string = "expense_proof") => {
+    const response = await api.post("/uploads/cloudinary/signature", {
+      purpose,
+    });
+    return response.data;
+  },
+
+  uploadToCloudinary: async (
+    uri: string,
+    signature: string,
+    timestamp: number,
+    cloudName: string,
+    apiKey: string,
+    folder: string,
+  ): Promise<{ url: string; publicId: string }> => {
+    // Get the file extension from URI
+    const uriParts = uri.split(".");
+    const fileType = uriParts[uriParts.length - 1].toLowerCase();
+
+    // Handle local file URI - prefix with file:// if needed
+    let fileUri = uri;
+    if (uri.startsWith("/") || uri.startsWith("file://")) {
+      fileUri = uri.startsWith("file://") ? uri : `file://${uri}`;
+    }
+
+    // Create form data with the file URI directly
+    // This works better with React Native
+    const formData = new FormData();
+    formData.append("file", {
+      uri: fileUri,
+      type: `image/${fileType === "jpg" ? "jpeg" : fileType}`,
+      name: `image.${fileType}`,
+    } as any);
+    formData.append("api_key", apiKey);
+    formData.append("timestamp", timestamp.toString());
+    formData.append("signature", signature);
+    formData.append("folder", folder);
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+      {
+        method: "POST",
+        body: formData,
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      },
+    );
+
+    const result = await response.json();
+
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+
+    return {
+      url: result.secure_url,
+      publicId: result.public_id,
+    };
+  },
+};
+
 // Jobs API
 export const jobsAPI = {
   getAll: async (params?: {
@@ -129,6 +193,11 @@ export const jobsAPI = {
 
   update: async (id: number, data: Partial<Job>): Promise<Job> => {
     const response = await api.patch(`/jobs/${id}`, data);
+    return response.data;
+  },
+
+  completeJob: async (id: number): Promise<Job> => {
+    const response = await api.post(`/jobs/${id}/complete`);
     return response.data;
   },
 

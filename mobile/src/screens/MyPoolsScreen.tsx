@@ -17,6 +17,7 @@ import { colors } from "../utils/colors";
 import { jobsAPI } from "../services/api";
 import { Job } from "../types";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 
 export default function MyPoolsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -26,8 +27,8 @@ export default function MyPoolsScreen() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"all" | "leader" | "worker">(
-    "all",
+  const [executionModeFilter, setExecutionModeFilter] = useState<string | null>(
+    null,
   );
 
   const fetchJobs = async () => {
@@ -94,19 +95,26 @@ export default function MyPoolsScreen() {
   // Only filter jobs if user is logged in
   const filteredJobs = user
     ? jobs.filter((job) => {
-        if (activeTab === "leader") return job.leaderId === user?.id;
-        if (activeTab === "worker") return job.selectedWorkerId === user?.id;
+        // Apply execution mode filter
+        if (executionModeFilter === "LEADER_EXECUTION")
+          return job.executionMode === "LEADER_EXECUTION";
+        if (executionModeFilter === "WORKER_EXECUTION")
+          return job.executionMode === "WORKER_EXECUTION";
         return true;
       })
     : [];
 
+  const executionModeFilters = [
+    { label: "All Modes", value: null, icon: null },
+    { label: "Leader", value: "LEADER_EXECUTION", icon: "user" },
+    { label: "Worker", value: "WORKER_EXECUTION", icon: "account-cowboy-hat" },
+  ];
+
   const renderJob = ({ item }: { item: Job }) => {
     const isLeader = item.leaderId === user?.id;
-    const isWorker = item.selectedWorkerId === user?.id;
-    const fundingPercent = Math.min(
-      ((item.collectedAmount || 0) / (item.targetAmount || 1)) * 100,
-      100,
-    );
+    const isLeaderMode = item.executionMode === "LEADER_EXECUTION";
+    const fundingPercent =
+      ((item.collectedAmount || 0) / (item.targetAmount || 1)) * 100;
 
     return (
       <TouchableOpacity
@@ -121,15 +129,26 @@ export default function MyPoolsScreen() {
               <FontAwesome name="group" size={24} color={colors.muted} />
             </View>
           )}
+          {/* Execution Mode Icon on Right Side */}
           <View
             style={[
-              styles.roleBadge,
-              { backgroundColor: isLeader ? colors.primary : colors.secondary },
+              styles.executionModeBadge,
+              {
+                backgroundColor: isLeaderMode
+                  ? colors.leaderExecution
+                  : colors.workerSelected,
+              },
             ]}
           >
-            <Text style={styles.roleBadgeText}>
-              {isLeader ? "Leader" : "Worker"}
-            </Text>
+            {isLeaderMode ? (
+              <FontAwesome name="user" size={10} color="white" />
+            ) : (
+              <MaterialCommunityIcons
+                name="account-cowboy-hat"
+                size={10}
+                color="white"
+              />
+            )}
           </View>
         </View>
         <View style={styles.jobContent}>
@@ -178,26 +197,51 @@ export default function MyPoolsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
+      {/* Execution Mode Filter */}
+      <View style={styles.executionFilterContainer}>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
-          data={[
-            { key: "all", label: "All" },
-            { key: "leader", label: "As Leader" },
-            { key: "worker", label: "As Worker" },
-          ]}
-          keyExtractor={(item) => item.key}
+          data={executionModeFilters}
+          keyExtractor={(item) => item.label || "all"}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[styles.tab, activeTab === item.key && styles.tabActive]}
-              onPress={() => setActiveTab(item.key as any)}
+              style={[
+                styles.executionFilterButton,
+                executionModeFilter === item.value &&
+                  styles.executionFilterButtonActive,
+              ]}
+              onPress={() => setExecutionModeFilter(item.value)}
             >
+              {item.icon === "user" && (
+                <FontAwesome
+                  name="user"
+                  size={12}
+                  color={
+                    executionModeFilter === item.value
+                      ? "white"
+                      : colors.primary
+                  }
+                  style={{ marginRight: 4 }}
+                />
+              )}
+              {item.icon === "account-cowboy-hat" && (
+                <MaterialCommunityIcons
+                  name="account-cowboy-hat"
+                  size={12}
+                  color={
+                    executionModeFilter === item.value
+                      ? "white"
+                      : colors.primary
+                  }
+                  style={{ marginRight: 4 }}
+                />
+              )}
               <Text
                 style={[
-                  styles.tabText,
-                  activeTab === item.key && styles.tabTextActive,
+                  styles.executionFilterText,
+                  executionModeFilter === item.value &&
+                    styles.executionFilterTextActive,
                 ]}
               >
                 {item.label}
@@ -227,21 +271,13 @@ export default function MyPoolsScreen() {
         <View style={styles.emptyState}>
           <FontAwesome name="group" size={48} color={colors.muted} />
           <Text style={styles.emptyTitle}>No Pools Found</Text>
-          <Text style={styles.emptyText}>
-            {activeTab === "leader"
-              ? "You haven't created any pools as a leader."
-              : activeTab === "worker"
-                ? "You haven't been selected for any pools as a worker."
-                : "You don't have any pools yet."}
-          </Text>
-          {activeTab === "leader" && (
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={() => navigation.navigate("CreatePool")}
-            >
-              <Text style={styles.createButtonText}>Create Pool</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={styles.emptyText}>You don't have any pools yet.</Text>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => navigation.navigate("CreatePool")}
+          >
+            <Text style={styles.createButtonText}>Create Pool</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -268,9 +304,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  executionFilterContainer: {
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  executionFilterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  executionFilterButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  executionFilterText: {
+    fontSize: 14,
+    color: colors.foreground,
+    fontWeight: "500",
+  },
+  executionFilterTextActive: {
+    color: "white",
+  },
   tab: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: colors.card,
     marginRight: 8,
@@ -351,6 +415,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  executionModeBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   roleBadge: {
     position: "absolute",
     top: 8,
@@ -358,6 +433,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
   },
   roleBadgeText: {
     color: "white",
@@ -411,12 +488,13 @@ const styles = StyleSheet.create({
     height: 6,
     backgroundColor: colors.secondary,
     borderRadius: 3,
-    overflow: "hidden",
+    overflow: "visible",
   },
   progressFill: {
     height: "100%",
     backgroundColor: colors.primary,
     borderRadius: 3,
+    maxWidth: "100%",
   },
   fundingText: {
     fontSize: 12,
